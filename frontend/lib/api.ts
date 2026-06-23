@@ -1,4 +1,4 @@
-import { BacktestConfig, JobStatus, TradeSessionConfig, TradingSession } from '@/types'
+import { BacktestConfig, JobStatus, TradeSessionConfig, TradingSession, CombinedStrategy } from '@/types'
 
 const BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
@@ -21,6 +21,42 @@ export async function getJobStatus(jobId: string): Promise<JobStatus> {
 
 export function getLogStreamUrl(): string {
   return `${BASE}/logs/stream`
+}
+
+// ── Combined Strategies ───────────────────────────────────────
+export async function listCombined(): Promise<CombinedStrategy[]> {
+  const res = await fetch(`${BASE}/strategies/combined`)
+  if (!res.ok) return []
+  return res.json()
+}
+
+export async function createCombined(payload: {
+  name: string; strategy_a: string; strategy_b: string; params?: Record<string, number>
+}): Promise<CombinedStrategy> {
+  const res = await fetch(`${BASE}/strategies/combined`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+  if (!res.ok) throw new Error((await res.json()).detail || `API error: ${res.status}`)
+  return res.json()
+}
+
+export async function updateCombined(
+  id: string,
+  payload: Partial<{ name: string; strategy_a: string; strategy_b: string; params: Record<string, number> }>
+): Promise<CombinedStrategy> {
+  const res = await fetch(`${BASE}/strategies/combined/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+  if (!res.ok) throw new Error((await res.json()).detail || `API error: ${res.status}`)
+  return res.json()
+}
+
+export async function deleteCombined(id: string): Promise<void> {
+  await fetch(`${BASE}/strategies/combined/${id}`, { method: 'DELETE' })
 }
 
 // ── Paper Trade ───────────────────────────────────────────────

@@ -1,67 +1,103 @@
 import asyncio
 from app.models.backtest_request import BacktestRequest
 from app.services.binance_client import fetch_klines
-from app.services.strategy_engine import get_signal
+from app.services.strategy_engine import get_signal, STRATEGY_MAP
+from app.services.combined_store import COMBO_PREFIX, get_combined
 from app.services.trade_simulator import simulate_trade
 from app.services.db_writer import save_trade
 from app.core.logger import emit_log
 
+
+def _strategy_label(strategy_id: str, secondary_id: str = None) -> str:
+    """Human-friendly label stored on each trade row."""
+    if strategy_id.startswith(COMBO_PREFIX):
+        combo = get_combined(strategy_id[len(COMBO_PREFIX):])
+        if combo:
+            return f"{combo['name']} ({combo['strategy_a']} + {combo['strategy_b']})"
+        return strategy_id
+    label = strategy_id
+    if secondary_id:
+        label += f" + {secondary_id}"
+    return label
+
+
 async def run_backtest_pipeline(job_id: str, req: BacktestRequest, jobs: dict):
     all_results = []
     params = {p.key: p.value for p in req.params}
-    strategy_label = req.strategy_primary
-    if req.strategy_secondary:
-        strategy_label += f" + {req.strategy_secondary}"
+
+    strategies = req.resolved_strategies()
+    if not strategies:
+        jobs[job_id]["status"] = "error"
+        await emit_log("ERROR", f"[{job_id}] No strategies selected")
+        return
+
+    # Total work units = strategies × coins (drives the progress bar).
+    jobs[job_id]["total"] = len(strategies) * len(req.coins)
+    jobs[job_id]["processed"] = 0
+    processed = 0
+
+    # Pre-fetch candles once per coin so every strategy reuses them.
+    candle_cache: dict = {}
 
     try:
-        for idx, coin in enumerate(req.coins):
-            await emit_log("INFO", f"[{job_id}] Starting {coin} ({idx+1}/{len(req.coins)})")
+        for s_idx, strategy_id in enumerate(strategies):
+            label = _strategy_label(strategy_id, req.strategy_secondary)
+            await emit_log("INFO", f"[{job_id}] Strategy {s_idx+1}/{len(strategies)}: {label}")
 
-            candles = await fetch_klines(coin, req.interval, req.start_dt, req.end_dt)
-            if not candles:
-                await emit_log("WARN", f"[{job_id}] No candles for {coin} — skipping")
-                continue
+            for coin in req.coins:
+                if coin not in candle_cache:
+                    candle_cache[coin] = await fetch_klines(
+                        coin, req.interval, req.start_dt, req.end_dt
+                    )
+                candles = candle_cache[coin]
 
-            window = 60  # minimum candles needed before checking signals
-            coin_results = []
-
-            for i in range(window, len(candles)):
-                window_candles = candles[max(0, i - window):i + 1]
-                signal = get_signal(
-                    req.strategy_primary,
-                    params,
-                    window_candles,
-                    req.strategy_secondary,
-                )
-                if signal is None:
+                if not candles:
+                    await emit_log("WARN", f"[{job_id}] No candles for {coin} — skipping")
+                    processed += 1
+                    jobs[job_id]["processed"] = processed
                     continue
 
-                direction, meta = signal
-                future = candles[i + 1:]
-                if not future:
-                    continue
+                window = 60  # minimum candles needed before checking signals
+                coin_results = []
 
-                result = simulate_trade(
-                    candles[i], future,
-                    direction, req.tp_pct, req.tp2_pct, req.sl_pct
-                )
-                result["coin"]                 = coin
-                result["strategy"]             = strategy_label
-                result["complete_calculation"] = meta
+                for i in range(window, len(candles)):
+                    window_candles = candles[max(0, i - window):i + 1]
+                    signal = get_signal(
+                        strategy_id,
+                        params,
+                        window_candles,
+                        req.strategy_secondary,
+                    )
+                    if signal is None:
+                        continue
 
-                await save_trade(result)
-                coin_results.append(result)
+                    direction, meta = signal
+                    future = candles[i + 1:]
+                    if not future:
+                        continue
 
-            wins   = sum(1 for r in coin_results if r["win_loss_rate"] == "Win")
-            losses = sum(1 for r in coin_results if r["win_loss_rate"] == "Loss")
-            await emit_log("INFO", f"[{job_id}] {coin} done — {wins}W / {losses}L from {len(coin_results)} signals")
+                    result = simulate_trade(
+                        candles[i], future,
+                        direction, req.tp_pct, req.tp2_pct, req.sl_pct
+                    )
+                    result["coin"]                 = coin
+                    result["strategy"]             = label
+                    result["complete_calculation"] = meta
 
-            all_results.extend(coin_results)
-            jobs[job_id]["processed"] = idx + 1
+                    await save_trade(result)
+                    coin_results.append(result)
+
+                wins   = sum(1 for r in coin_results if r["win_loss_rate"] == "Win")
+                losses = sum(1 for r in coin_results if r["win_loss_rate"] == "Loss")
+                await emit_log("INFO", f"[{job_id}] {label} · {coin} — {wins}W / {losses}L from {len(coin_results)} signals")
+
+                all_results.extend(coin_results)
+                processed += 1
+                jobs[job_id]["processed"] = processed
 
         jobs[job_id]["status"]  = "done"
         jobs[job_id]["results"] = _serialize(all_results)
-        await emit_log("INFO", f"[{job_id}] Backtest complete — {len(all_results)} total trades")
+        await emit_log("INFO", f"[{job_id}] Backtest complete — {len(all_results)} total trades across {len(strategies)} strategies")
 
     except Exception as e:
         jobs[job_id]["status"] = "error"

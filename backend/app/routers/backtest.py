@@ -9,7 +9,8 @@ _active_jobs: dict = {}
 @router.post("/run")
 async def run_backtest(req: BacktestRequest, background_tasks: BackgroundTasks):
     job_id = str(uuid.uuid4())
-    _active_jobs[job_id] = {"status": "running", "processed": 0, "total": len(req.coins)}
+    total = max(1, len(req.resolved_strategies())) * len(req.coins)
+    _active_jobs[job_id] = {"status": "running", "processed": 0, "total": total}
     background_tasks.add_task(run_backtest_pipeline, job_id, req, _active_jobs)
     return {"job_id": job_id}
 

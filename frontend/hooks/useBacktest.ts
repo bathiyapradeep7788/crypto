@@ -27,6 +27,7 @@ export function useBacktest() {
           if (data.status === 'done') {
             clearInterval(poll)
             setResults(data.results ?? [])
+            setProgress({ processed: data.total, total: data.total })
             setStatus('done')
           } else if (data.status === 'error') {
             clearInterval(poll)

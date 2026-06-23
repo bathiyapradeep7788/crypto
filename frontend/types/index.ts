@@ -7,13 +7,22 @@ export interface BacktestConfig {
   coins: string[]
   start_dt: string
   end_dt: string
-  strategy_primary: string
-  strategy_secondary?: string
+  strategies: string[]
   params: StrategyParam[]
   tp_pct: number
   tp2_pct: number
   sl_pct: number
   interval: string
+}
+
+export interface CombinedStrategy {
+  id: string
+  name: string
+  strategy_a: string
+  strategy_b: string
+  logic: string
+  params: Record<string, number>
+  created_at: string
 }
 
 export interface TradeResult {

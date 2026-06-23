@@ -11,9 +11,22 @@ export default function ResultsTable({ results }: Props) {
   const winRate = ((wins / results.length) * 100).toFixed(1)
   const totalPnl = results.reduce((sum, r) => sum + r.profit_rate, 0).toFixed(2)
 
+  // Per-strategy breakdown so multiple strategies can be compared at a glance.
+  const byStrategy = Object.values(
+    results.reduce((acc, r) => {
+      const k = r.strategy
+      if (!acc[k]) acc[k] = { strategy: k, trades: 0, wins: 0, losses: 0, pnl: 0 }
+      acc[k].trades += 1
+      if (r.win_loss_rate === 'Win') acc[k].wins += 1
+      else acc[k].losses += 1
+      acc[k].pnl += r.profit_rate
+      return acc
+    }, {} as Record<string, { strategy: string; trades: number; wins: number; losses: number; pnl: number }>)
+  ).sort((a, b) => b.pnl - a.pnl)
+
   return (
     <div className="space-y-4">
-      {/* Summary */}
+      {/* Overall summary */}
       <div className="grid grid-cols-4 gap-3">
         {[
           { label: 'Total Trades', value: results.length,         color: 'text-white' },
@@ -27,6 +40,45 @@ export default function ResultsTable({ results }: Props) {
           </div>
         ))}
       </div>
+
+      {/* Per-strategy comparison (shown when more than one strategy ran) */}
+      {byStrategy.length > 1 && (
+        <div className="bg-surface-card border border-surface-border rounded-lg overflow-hidden">
+          <p className="text-sm font-semibold text-gray-300 px-4 pt-3">Strategy Comparison</p>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs mt-2">
+              <thead className="border-b border-surface-border">
+                <tr className="text-gray-500 text-left">
+                  {['Rank','Strategy','Trades','Win Rate','W / L','Net PnL'].map(h => (
+                    <th key={h} className="px-4 py-2 font-medium whitespace-nowrap">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {byStrategy.map((s, i) => {
+                  const wr = ((s.wins / s.trades) * 100).toFixed(1)
+                  return (
+                    <tr key={s.strategy} className="border-b border-surface-border hover:bg-surface-hover">
+                      <td className="px-4 py-2 text-gray-500">#{i + 1}</td>
+                      <td className="px-4 py-2 text-gray-200">{s.strategy}</td>
+                      <td className="px-4 py-2 font-mono">{s.trades}</td>
+                      <td className="px-4 py-2 font-mono text-brand">{wr}%</td>
+                      <td className="px-4 py-2 font-mono">
+                        <span className="text-green-400">{s.wins}W</span>
+                        {' / '}
+                        <span className="text-red-400">{s.losses}L</span>
+                      </td>
+                      <td className={`px-4 py-2 font-mono font-semibold ${s.pnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                        {s.pnl >= 0 ? '+' : ''}{s.pnl.toFixed(2)}%
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {/* Table */}
       <div className="bg-surface-card border border-surface-border rounded-lg overflow-hidden">

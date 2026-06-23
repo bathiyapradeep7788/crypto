@@ -15,29 +15,35 @@ export default function BacktestPage() {
   const [startDt,     setStartDt]     = useState('2024-01-01T00:00')
   const [endDt,       setEndDt]       = useState('2024-06-01T00:00')
   const [interval,    setInterval]    = useState('1h')
-  const [primary,     setPrimary]     = useState('rsi_macd')
-  const [secondary,   setSecondary]   = useState('')
+  const [strategies,  setStrategies]  = useState<string[]>(['rsi_macd'])
   const [paramValues, setParamValues] = useState<Record<string, number>>({})
   const [tpPct,  setTpPct]  = useState(2.0)
   const [tp2Pct, setTp2Pct] = useState(4.0)
   const [slPct,  setSlPct]  = useState(1.5)
 
+  // Param editing is only meaningful when exactly one built-in strategy is
+  // selected. With several strategies running together we use their standard
+  // defaults so each runs at its textbook settings.
+  const soloBuiltIn =
+    strategies.length === 1 && !strategies[0].startsWith('combo_') ? strategies[0] : null
+
   const setParam = (key: string, val: number) =>
     setParamValues(prev => ({ ...prev, [key]: val }))
 
   const buildParams = () => {
-    const defaults = DEFAULT_PARAMS[primary] ?? []
+    if (!soloBuiltIn) return []
+    const defaults = DEFAULT_PARAMS[soloBuiltIn] ?? []
     return defaults.map(f => ({ key: f.key, value: paramValues[f.key] ?? f.default }))
   }
 
   const handleRun = () => {
     if (coins.length === 0) return alert('Select at least one coin')
+    if (strategies.length === 0) return alert('Select at least one strategy')
     run({
       coins,
       start_dt: new Date(startDt).toISOString(),
       end_dt:   new Date(endDt).toISOString(),
-      strategy_primary:   primary,
-      strategy_secondary: secondary || undefined,
+      strategies,
       params:   buildParams(),
       tp_pct:   tpPct,
       tp2_pct:  tp2Pct,
@@ -63,7 +69,7 @@ export default function BacktestPage() {
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
               </svg>
-              Processing {progress.processed}/{progress.total} coins...
+              Processing {progress.processed}/{progress.total} runs...
             </div>
           )}
         </div>
@@ -107,12 +113,20 @@ export default function BacktestPage() {
           {/* Right panel */}
           <div className="col-span-8 space-y-4">
             <StrategySelector
-              primary={primary} secondary={secondary}
-              onPrimary={setPrimary} onSecondary={setSecondary}
+              selected={strategies}
+              onChange={setStrategies}
             />
 
+            {!soloBuiltIn && (
+              <p className="text-xs text-gray-500 italic px-1">
+                {strategies.length > 1
+                  ? `Running ${strategies.length} strategies — each uses its standard parameters.`
+                  : 'Combined/multiple selection — standard parameters are used.'}
+              </p>
+            )}
+
             <StrategyParams
-              strategyId={primary}
+              strategyId={soloBuiltIn ?? ''}
               values={paramValues}
               onChange={setParam}
               tpPct={tpPct} tp2Pct={tp2Pct} slPct={slPct}
