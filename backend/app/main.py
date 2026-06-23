@@ -7,7 +7,10 @@ app = FastAPI(title="Algo Trading Platform")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "https://*.vercel.app", "https://*.onrender.com"],
+    # Starlette's allow_origins does exact-string matching only — a literal
+    # "https://*.vercel.app" never matches a real subdomain. Use a regex so
+    # every *.vercel.app / *.onrender.com deployment (and localhost) is allowed.
+    allow_origin_regex=r"https://([a-z0-9-]+\.)*vercel\.app|https://([a-z0-9-]+\.)*onrender\.com|http://localhost:3000",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
