@@ -8,6 +8,7 @@ class Settings(BaseSettings):
     binance_api_key: str = ""
     binance_api_secret: str = ""
     anthropic_api_key: str = ""
+    render_api_key: str = ""
 
     class Config:
         env_file = ".env"

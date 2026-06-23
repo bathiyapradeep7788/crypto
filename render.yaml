@@ -1,6 +1,7 @@
 services:
+  # ── Backend (FastAPI) ─────────────────────────────────────
   - type: web
-    name: algo-trading-backend
+    name: algobot-backend
     runtime: python
     rootDir: backend
     buildCommand: pip install -r requirements.txt
@@ -20,3 +21,20 @@ services:
         sync: false
       - key: ANTHROPIC_API_KEY
         sync: false
+
+  # ── Frontend (Next.js) ────────────────────────────────────
+  - type: web
+    name: algobot-frontend
+    runtime: node
+    rootDir: frontend
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NEXT_PUBLIC_API_URL
+        sync: false
+      - key: NEXT_PUBLIC_SUPABASE_URL
+        value: https://llctmrzftfijdnixcffz.supabase.co
+      - key: NEXT_PUBLIC_SUPABASE_ANON_KEY
+        sync: false
+      - key: PORT
+        value: 3000
