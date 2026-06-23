@@ -11,7 +11,7 @@ async def fetch_klines(
     end_dt: datetime,
     limit: int = 1000
 ) -> List[Dict]:
-    url = f"{settings.binance_base_url}/api/v3/klines"
+    url = f"{settings.binance_data_url}/api/v3/klines"
     start_ms = int(start_dt.timestamp() * 1000)
     end_ms = int(end_dt.timestamp() * 1000)
     all_candles = []

@@ -20,7 +20,7 @@ def _auth_headers() -> dict:
 
 
 async def fetch_current_price(symbol: str) -> float:
-    url = f"{settings.binance_base_url}/api/v3/ticker/price"
+    url = f"{settings.binance_data_url}/api/v3/ticker/price"
     async with httpx.AsyncClient(timeout=10) as client:
         resp = await client.get(url, params={"symbol": symbol})
         resp.raise_for_status()
@@ -28,7 +28,7 @@ async def fetch_current_price(symbol: str) -> float:
 
 
 async def fetch_recent_klines(symbol: str, interval: str, limit: int = 100) -> list:
-    url = f"{settings.binance_base_url}/api/v3/klines"
+    url = f"{settings.binance_data_url}/api/v3/klines"
     async with httpx.AsyncClient(timeout=15) as client:
         resp = await client.get(url, params={"symbol": symbol, "interval": interval, "limit": limit})
         resp.raise_for_status()
