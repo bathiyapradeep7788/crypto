@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: algo-trading-backend
+    runtime: python
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_KEY
+        sync: false
+      - key: BINANCE_BASE_URL
+        value: https://api.binance.com
+      - key: BINANCE_DEMO_URL
+        value: https://testnet.binance.vision
+      - key: BINANCE_API_KEY
+        sync: false
+      - key: BINANCE_API_SECRET
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
