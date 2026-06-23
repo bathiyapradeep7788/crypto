@@ -16,10 +16,10 @@ export default function ResultsTable({ results }: Props) {
       {/* Summary */}
       <div className="grid grid-cols-4 gap-3">
         {[
-          { label: 'Total Trades', value: results.length, color: 'text-white' },
-          { label: 'Win Rate',     value: `${winRate}%`,  color: 'text-brand'  },
-          { label: 'Wins',         value: wins,            color: 'text-green-400' },
-          { label: 'Net PnL',      value: `${totalPnl}%`, color: parseFloat(totalPnl) >= 0 ? 'text-green-400' : 'text-red-400' },
+          { label: 'Total Trades', value: results.length,         color: 'text-white' },
+          { label: 'Win Rate',     value: `${winRate}%`,          color: 'text-brand'  },
+          { label: 'Wins',         value: `${wins}W / ${losses}L`, color: wins > losses ? 'text-green-400' : 'text-red-400' },
+          { label: 'Net PnL',      value: `${parseFloat(totalPnl) >= 0 ? '+' : ''}${totalPnl}%`, color: parseFloat(totalPnl) >= 0 ? 'text-green-400' : 'text-red-400' },
         ].map(stat => (
           <div key={stat.label} className="bg-surface-card border border-surface-border rounded-lg p-3 text-center">
             <p className="text-xs text-gray-500">{stat.label}</p>

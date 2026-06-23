@@ -6,6 +6,7 @@ const TABS = [
   { href: '/backtest',    label: 'Backtest Bot'      },
   { href: '/paper-trade', label: 'Paper Trade'        },
   { href: '/live-trade',  label: 'Live Actual Trade'  },
+  { href: '/database',    label: 'Database'           },
   { href: '/logs',        label: 'System Logs'        },
 ]
 
@@ -15,7 +16,7 @@ export default function TabBar() {
   return (
     <header className="bg-surface-card border-b border-surface-border">
       <div className="max-w-screen-2xl mx-auto px-6">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1">
           <span className="text-brand font-bold text-lg mr-6 py-4">⚡ AlgoBot</span>
           {TABS.map(tab => {
             const isActive = pathname.startsWith(tab.href)
