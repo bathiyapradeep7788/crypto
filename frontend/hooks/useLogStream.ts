@@ -1,42 +1,37 @@
 'use client'
 import { useEffect, useRef, useState } from 'react'
 import { LogEntry } from '@/types'
-import { getLogStreamUrl } from '@/lib/api'
+import { getRecentLogs } from '@/lib/api'
 
+// Polls /logs/recent every 2s. Replaces the old SSE EventSource, which kept
+// erroring + reconnecting on Vercel serverless (no long-lived connections).
 export function useLogStream() {
-  const [logs, setLogs]   = useState<LogEntry[]>([])
-  const sourceRef         = useRef<EventSource | null>(null)
+  const [logs, setLogs] = useState<LogEntry[]>([])
+  const lastIdRef = useRef(0)
 
   useEffect(() => {
-    const es = new EventSource(getLogStreamUrl())
-    sourceRef.current = es
+    let alive = true
 
-    es.onmessage = (e) => {
+    const tick = async () => {
       try {
-        const entry: LogEntry = JSON.parse(e.data)
-        setLogs(prev => [entry, ...prev].slice(0, 500))
-      } catch {}
-    }
-
-    es.onerror = () => {
-      es.close()
-      // Reconnect after 3s
-      setTimeout(() => {
-        const es2 = new EventSource(getLogStreamUrl())
-        sourceRef.current = es2
-        es2.onmessage = (e) => {
-          try {
-            const entry: LogEntry = JSON.parse(e.data)
-            setLogs(prev => [entry, ...prev].slice(0, 500))
-          } catch {}
+        const data = await getRecentLogs(lastIdRef.current)
+        if (!alive) return
+        if (data.logs.length > 0) {
+          lastIdRef.current = data.last_id
+          // newest first, capped at 500
+          setLogs(prev => [...data.logs.slice().reverse(), ...prev].slice(0, 500))
         }
-      }, 3000)
+      } catch {
+        // ignore — next tick retries
+      }
     }
 
-    return () => es.close()
+    tick()
+    const id = setInterval(tick, 2000)
+    return () => { alive = false; clearInterval(id) }
   }, [])
 
-  const clear = () => setLogs([])
+  const clear = () => { setLogs([]) }
 
   return { logs, clear }
 }

@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect, useCallback } from 'react'
 import TabBar from '@/components/layout/TabBar'
+import { getJSON } from '@/lib/api'
 
 const BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
@@ -46,16 +47,14 @@ export default function DatabasePage() {
 
   const loadStats = useCallback(async () => {
     try {
-      const r = await fetch(`${BASE}/database/stats`)
-      setStats(await r.json())
+      setStats(await getJSON('/database/stats'))
     } catch {}
   }, [])
 
   const loadRows = useCallback(async (table: string, pg: number) => {
     setLoading(true)
     try {
-      const r = await fetch(`${BASE}/database/rows/${table}?limit=${limit}&offset=${pg * limit}`)
-      const d = await r.json()
+      const d = await getJSON<{ rows: any[]; total: number }>(`/database/rows/${table}?limit=${limit}&offset=${pg * limit}`)
       setRows(d.rows ?? [])
       setTotal(d.total ?? 0)
     } catch { setRows([]) }

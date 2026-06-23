@@ -41,6 +41,7 @@ export interface TradeResult {
 }
 
 export interface LogEntry {
+  id?: number
   ts: string
   level: 'INFO' | 'WARN' | 'ERROR'
   message: string

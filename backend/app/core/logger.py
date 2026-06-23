@@ -1,21 +1,28 @@
-import asyncio
-import json
+from collections import deque
 from datetime import datetime, timezone
+from threading import Lock
 
-_log_queue: asyncio.Queue = asyncio.Queue(maxsize=500)
+# Recent-logs ring buffer. Polling-based (serverless-friendly) — Vercel
+# functions cannot hold the long-lived SSE connection the old design used.
+_MAX = 500
+_logs: deque = deque(maxlen=_MAX)
+_seq = 0
+_lock = Lock()
+
 
 async def emit_log(level: str, message: str):
-    entry = {
-        "ts": datetime.now(timezone.utc).isoformat(),
-        "level": level,
-        "message": message,
-    }
-    try:
-        _log_queue.put_nowait(entry)
-    except asyncio.QueueFull:
-        pass
+    global _seq
+    with _lock:
+        _seq += 1
+        _logs.append({
+            "id": _seq,
+            "ts": datetime.now(timezone.utc).isoformat(),
+            "level": level,
+            "message": message,
+        })
 
-async def log_stream_generator():
-    while True:
-        entry = await _log_queue.get()
-        yield f"data: {json.dumps(entry)}\n\n"
+
+def get_recent_logs(after_id: int = 0):
+    """Return logs with id greater than `after_id` (chronological order)."""
+    with _lock:
+        return [entry for entry in _logs if entry["id"] > after_id]

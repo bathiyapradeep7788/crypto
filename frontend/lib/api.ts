@@ -1,6 +1,27 @@
-import { BacktestConfig, JobStatus, TradeSessionConfig, TradingSession, CombinedStrategy } from '@/types'
+import { BacktestConfig, JobStatus, TradeSessionConfig, TradingSession, CombinedStrategy, LogEntry } from '@/types'
 
 const BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+
+// Serverless cold starts (~12s) make the first request after idle 503/time out.
+// Retry GETs a few times with a short backoff so a cold start doesn't surface
+// as an error in the UI.
+export async function getJSON<T>(path: string, retries = 3): Promise<T> {
+  let lastErr: any
+  for (let i = 0; i <= retries; i++) {
+    try {
+      const res = await fetch(`${BASE}${path}`)
+      if (res.status === 503 || res.status === 502 || res.status === 504) {
+        throw new Error(`warming up (${res.status})`)
+      }
+      if (!res.ok) throw new Error(`API error: ${res.status}`)
+      return res.json()
+    } catch (e) {
+      lastErr = e
+      if (i < retries) await new Promise(r => setTimeout(r, 1500))
+    }
+  }
+  throw lastErr
+}
 
 // ── Backtest ──────────────────────────────────────────────────
 export async function startBacktest(config: BacktestConfig): Promise<{ job_id: string }> {
@@ -14,20 +35,21 @@ export async function startBacktest(config: BacktestConfig): Promise<{ job_id: s
 }
 
 export async function getJobStatus(jobId: string): Promise<JobStatus> {
-  const res = await fetch(`${BASE}/backtest/status/${jobId}`)
-  if (!res.ok) throw new Error(`Status error: ${res.status}`)
-  return res.json()
+  return getJSON<JobStatus>(`/backtest/status/${jobId}`)
 }
 
-export function getLogStreamUrl(): string {
-  return `${BASE}/logs/stream`
+// ── Logs (polling) ────────────────────────────────────────────
+export async function getRecentLogs(afterId = 0): Promise<{ logs: LogEntry[]; last_id: number }> {
+  return getJSON(`/logs/recent?after_id=${afterId}`, 1)
 }
 
 // ── Combined Strategies ───────────────────────────────────────
 export async function listCombined(): Promise<CombinedStrategy[]> {
-  const res = await fetch(`${BASE}/strategies/combined`)
-  if (!res.ok) return []
-  return res.json()
+  try {
+    return await getJSON<CombinedStrategy[]>('/strategies/combined')
+  } catch {
+    return []
+  }
 }
 
 export async function createCombined(payload: {
@@ -81,9 +103,11 @@ export async function getPaperStatus(sessionId: string): Promise<TradingSession>
 }
 
 export async function getAllPaperSessions(): Promise<TradingSession[]> {
-  const res = await fetch(`${BASE}/paper-trade/sessions`)
-  if (!res.ok) return []
-  return res.json()
+  try {
+    return await getJSON<TradingSession[]>('/paper-trade/sessions')
+  } catch {
+    return []
+  }
 }
 
 // ── Live Trade ────────────────────────────────────────────────
@@ -108,7 +132,9 @@ export async function getLiveStatus(sessionId: string): Promise<TradingSession> 
 }
 
 export async function getAllLiveSessions(): Promise<TradingSession[]> {
-  const res = await fetch(`${BASE}/live-trade/sessions`)
-  if (!res.ok) return []
-  return res.json()
+  try {
+    return await getJSON<TradingSession[]>('/live-trade/sessions')
+  } catch {
+    return []
+  }
 }
