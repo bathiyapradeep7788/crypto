@@ -4,7 +4,7 @@ from app.services.binance_client import fetch_klines
 from app.services.strategy_engine import get_signal, STRATEGY_MAP
 from app.services.combined_store import COMBO_PREFIX, get_combined
 from app.services.trade_simulator import simulate_trade
-from app.services.db_writer import save_trade
+from app.services.db_writer import save_trades
 from app.services import job_store
 from app.core.logger import emit_log
 
@@ -86,8 +86,10 @@ async def run_backtest_pipeline(job_id: str, req: BacktestRequest):
                     result["strategy"]             = label
                     result["complete_calculation"] = meta
 
-                    await save_trade(result)
                     coin_results.append(result)
+
+                # One bulk insert per coin instead of one round-trip per trade.
+                await save_trades(coin_results)
 
                 wins   = sum(1 for r in coin_results if r["win_loss_rate"] == "Win")
                 losses = sum(1 for r in coin_results if r["win_loss_rate"] == "Loss")
