@@ -1,4 +1,4 @@
-import { BacktestConfig, JobStatus, TradeSessionConfig, TradingSession, CombinedStrategy, LogEntry } from '@/types'
+import { BacktestConfig, JobStatus, TradeSessionConfig, TradingSession, CombinedStrategy, LogEntry, TradeResult } from '@/types'
 
 const BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
@@ -24,14 +24,32 @@ export async function getJSON<T>(path: string, retries = 6, delayMs = 2500): Pro
 }
 
 // ── Backtest ──────────────────────────────────────────────────
-export async function startBacktest(config: BacktestConfig): Promise<{ job_id: string }> {
-  const res = await fetch(`${BASE}/backtest/run`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(config),
-  })
-  if (!res.ok) throw new Error(`API error: ${res.status}`)
-  return res.json()
+// Runs synchronously on the backend and returns results in the response.
+// Retries on cold-start 503; allows a long timeout for the computation.
+export async function runBacktest(config: BacktestConfig, retries = 3): Promise<{ results: TradeResult[] }> {
+  let lastErr: any
+  for (let i = 0; i <= retries; i++) {
+    try {
+      const ctrl = new AbortController()
+      const t = setTimeout(() => ctrl.abort(), 110000)
+      const res = await fetch(`${BASE}/backtest/run`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(config),
+        signal: ctrl.signal,
+      })
+      clearTimeout(t)
+      if (res.status === 503 || res.status === 502 || res.status === 504) {
+        throw new Error(`warming up (${res.status})`)
+      }
+      if (!res.ok) throw new Error(`API error: ${res.status}`)
+      return res.json()
+    } catch (e) {
+      lastErr = e
+      if (i < retries) await new Promise(r => setTimeout(r, 2500))
+    }
+  }
+  throw lastErr
 }
 
 export async function getJobStatus(jobId: string): Promise<JobStatus> {

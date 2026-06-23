@@ -98,12 +98,15 @@ async def run_backtest_pipeline(job_id: str, req: BacktestRequest):
                 if processed % 5 == 0:
                     job_store.update_progress(job_id, processed, total)
 
-        job_store.finish_job(job_id, "done", _serialize(all_results))
+        serialized = _serialize(all_results)
+        job_store.finish_job(job_id, "done", serialized)
         await emit_log("INFO", f"[{job_id}] Backtest complete — {len(all_results)} total trades across {len(strategies)} strategies")
+        return serialized
 
     except Exception as e:
         job_store.finish_job(job_id, "error")
         await emit_log("ERROR", f"[{job_id}] Pipeline crashed: {str(e)}")
+        return []
 
 
 def _serialize(results):
