@@ -2,10 +2,10 @@ import { BacktestConfig, JobStatus, TradeSessionConfig, TradingSession, Combined
 
 const BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
-// Serverless cold starts (~12s) make the first request after idle 503/time out.
-// Retry GETs a few times with a short backoff so a cold start doesn't surface
-// as an error in the UI.
-export async function getJSON<T>(path: string, retries = 3): Promise<T> {
+// Serverless cold starts (~13s on Vercel free tier) make the first request
+// after idle return 503. Retry GETs with backoff long enough to outlast a cold
+// start (≈15s) so it never surfaces as an error in the UI.
+export async function getJSON<T>(path: string, retries = 6, delayMs = 2500): Promise<T> {
   let lastErr: any
   for (let i = 0; i <= retries; i++) {
     try {
@@ -17,7 +17,7 @@ export async function getJSON<T>(path: string, retries = 3): Promise<T> {
       return res.json()
     } catch (e) {
       lastErr = e
-      if (i < retries) await new Promise(r => setTimeout(r, 1500))
+      if (i < retries) await new Promise(r => setTimeout(r, delayMs))
     }
   }
   throw lastErr
