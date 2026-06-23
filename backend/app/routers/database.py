@@ -19,13 +19,40 @@ async def get_rows(
     table: str,
     limit: int = Query(default=100, le=500),
     offset: int = Query(default=0),
+    coin: Optional[str] = Query(default=None),
+    strategy: Optional[str] = Query(default=None),
+    win_loss: Optional[str] = Query(default=None),
 ):
     if table not in ALLOWED_TABLES:
         raise HTTPException(status_code=400, detail="Invalid table")
     client = _get_client()
-    res = client.table(table).select("*").order("created_at", desc=True).range(offset, offset + limit - 1).execute()
-    count_res = client.table(table).select("id", count="exact").execute()
+
+    def _apply(q):
+        if coin:
+            q = q.eq("coin", coin)
+        if strategy:
+            q = q.eq("strategy", strategy)
+        if win_loss and table == "backtest_results":
+            q = q.eq("win_loss_rate", win_loss)
+        return q
+
+    query = _apply(client.table(table).select("*")).order("created_at", desc=True)
+    res = query.range(offset, offset + limit - 1).execute()
+    count_res = _apply(client.table(table).select("id", count="exact")).execute()
     return {"rows": res.data, "total": count_res.count}
+
+
+@router.get("/distinct/{table}/{column}")
+async def get_distinct(table: str, column: str):
+    """Distinct values for a column — powers the filter dropdowns."""
+    if table not in ALLOWED_TABLES:
+        raise HTTPException(status_code=400, detail="Invalid table")
+    if column not in {"coin", "strategy"}:
+        raise HTTPException(status_code=400, detail="Invalid column")
+    client = _get_client()
+    res = client.table(table).select(column).limit(2000).execute()
+    values = sorted({r[column] for r in res.data if r.get(column)})
+    return {"values": values}
 
 
 @router.delete("/rows/{table}/{row_id}")

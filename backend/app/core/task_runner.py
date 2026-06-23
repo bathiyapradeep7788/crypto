@@ -6,7 +6,7 @@ from app.services.combined_store import COMBO_PREFIX, get_combined
 from app.services.trade_simulator import simulate_trade
 from app.services.db_writer import save_trades
 from app.services import job_store
-from app.core.logger import emit_log
+from app.core.logger import emit_log, flush_to_db
 
 
 def _strategy_label(strategy_id: str, secondary_id: str = None) -> str:
@@ -103,11 +103,13 @@ async def run_backtest_pipeline(job_id: str, req: BacktestRequest):
         serialized = _serialize(all_results)
         job_store.finish_job(job_id, "done", serialized)
         await emit_log("INFO", f"[{job_id}] Backtest complete — {len(all_results)} total trades across {len(strategies)} strategies")
+        flush_to_db()
         return serialized
 
     except Exception as e:
         job_store.finish_job(job_id, "error")
         await emit_log("ERROR", f"[{job_id}] Pipeline crashed: {str(e)}")
+        flush_to_db()
         return []
 
 

@@ -45,16 +45,42 @@ export default function DatabasePage() {
   const [confirm, setConfirm]   = useState<string | null>(null)
   const limit = 50
 
+  // Filters
+  const [fCoin, setFCoin]         = useState('')
+  const [fStrategy, setFStrategy] = useState('')
+  const [fWinLoss, setFWinLoss]   = useState('')
+  const [coinOpts, setCoinOpts]         = useState<string[]>([])
+  const [strategyOpts, setStrategyOpts] = useState<string[]>([])
+
+  const qs = (pg: number) => {
+    const p = new URLSearchParams({ limit: String(limit), offset: String(pg * limit) })
+    if (fCoin) p.set('coin', fCoin)
+    if (fStrategy) p.set('strategy', fStrategy)
+    if (fWinLoss) p.set('win_loss', fWinLoss)
+    return p.toString()
+  }
+
   const loadStats = useCallback(async () => {
     try {
       setStats(await getJSON('/database/stats'))
     } catch {}
   }, [])
 
-  const loadRows = useCallback(async (table: string, pg: number) => {
+  const loadOptions = useCallback(async (table: string) => {
+    try {
+      const [c, s] = await Promise.all([
+        getJSON<{ values: string[] }>(`/database/distinct/${table}/coin`),
+        getJSON<{ values: string[] }>(`/database/distinct/${table}/strategy`),
+      ])
+      setCoinOpts(c.values ?? [])
+      setStrategyOpts(s.values ?? [])
+    } catch { setCoinOpts([]); setStrategyOpts([]) }
+  }, [])
+
+  const loadRows = useCallback(async (table: string, pg: number, query: string) => {
     setLoading(true)
     try {
-      const d = await getJSON<{ rows: any[]; total: number }>(`/database/rows/${table}?limit=${limit}&offset=${pg * limit}`)
+      const d = await getJSON<{ rows: any[]; total: number }>(`/database/rows/${table}?${query}`)
       setRows(d.rows ?? [])
       setTotal(d.total ?? 0)
     } catch { setRows([]) }
@@ -62,11 +88,17 @@ export default function DatabasePage() {
   }, [])
 
   useEffect(() => { loadStats() }, [loadStats])
-  useEffect(() => { setPage(0); loadRows(activeTable, 0) }, [activeTable, loadRows])
+  // Reset filters + reload when switching tables
+  useEffect(() => {
+    setPage(0); setFCoin(''); setFStrategy(''); setFWinLoss('')
+    loadOptions(activeTable)
+  }, [activeTable, loadOptions])
+  // Reload rows when table, page, or filters change
+  useEffect(() => { loadRows(activeTable, page, qs(page)) }, [activeTable, page, fCoin, fStrategy, fWinLoss]) // eslint-disable-line
 
   const deleteRow = async (id: string) => {
     await fetch(`${BASE}/database/rows/${activeTable}/${id}`, { method: 'DELETE' })
-    loadRows(activeTable, page)
+    loadRows(activeTable, page, qs(page))
     loadStats()
   }
 
@@ -89,7 +121,7 @@ export default function DatabasePage() {
             <p className="text-xs text-gray-500 mt-0.5">View, filter and delete records from Supabase</p>
           </div>
           <button
-            onClick={() => loadRows(activeTable, page)}
+            onClick={() => loadRows(activeTable, page, qs(page))}
             className="text-xs px-3 py-1.5 bg-surface-card border border-surface-border rounded text-gray-400 hover:text-white transition-colors"
           >
             ↻ Refresh
@@ -115,6 +147,46 @@ export default function DatabasePage() {
           ))}
         </div>
 
+        {/* Filters */}
+        <div className="flex flex-wrap items-center gap-3 mb-3 bg-surface-card border border-surface-border rounded-lg px-4 py-3">
+          <span className="text-xs text-gray-500 font-semibold">Filters:</span>
+          <select
+            value={fCoin}
+            onChange={e => { setFCoin(e.target.value); setPage(0) }}
+            className="bg-surface border border-surface-border rounded px-2 py-1.5 text-xs text-white focus:outline-none focus:border-brand"
+          >
+            <option value="">All Coins</option>
+            {coinOpts.map(c => <option key={c} value={c}>{c}</option>)}
+          </select>
+          <select
+            value={fStrategy}
+            onChange={e => { setFStrategy(e.target.value); setPage(0) }}
+            className="bg-surface border border-surface-border rounded px-2 py-1.5 text-xs text-white focus:outline-none focus:border-brand max-w-xs"
+          >
+            <option value="">All Strategies</option>
+            {strategyOpts.map(s => <option key={s} value={s}>{s}</option>)}
+          </select>
+          {activeTable === 'backtest_results' && (
+            <select
+              value={fWinLoss}
+              onChange={e => { setFWinLoss(e.target.value); setPage(0) }}
+              className="bg-surface border border-surface-border rounded px-2 py-1.5 text-xs text-white focus:outline-none focus:border-brand"
+            >
+              <option value="">All Results</option>
+              <option value="Win">Wins only</option>
+              <option value="Loss">Losses only</option>
+            </select>
+          )}
+          {(fCoin || fStrategy || fWinLoss) && (
+            <button
+              onClick={() => { setFCoin(''); setFStrategy(''); setFWinLoss(''); setPage(0) }}
+              className="text-xs text-gray-400 hover:text-white underline"
+            >
+              Clear filters
+            </button>
+          )}
+        </div>
+
         {/* Table actions */}
         <div className="flex items-center justify-between mb-3">
           <p className="text-sm text-gray-400">
@@ -123,7 +195,7 @@ export default function DatabasePage() {
           <div className="flex gap-2">
             <button
               disabled={page === 0}
-              onClick={() => { const p = page - 1; setPage(p); loadRows(activeTable, p) }}
+              onClick={() => setPage(page - 1)}
               className="text-xs px-3 py-1.5 bg-surface-card border border-surface-border rounded text-gray-400 hover:text-white disabled:opacity-30 transition-colors"
             >
               ← Prev
@@ -131,7 +203,7 @@ export default function DatabasePage() {
             <span className="text-xs text-gray-500 px-2 py-1.5">Page {page + 1} / {Math.ceil(total / limit) || 1}</span>
             <button
               disabled={(page + 1) * limit >= total}
-              onClick={() => { const p = page + 1; setPage(p); loadRows(activeTable, p) }}
+              onClick={() => setPage(page + 1)}
               className="text-xs px-3 py-1.5 bg-surface-card border border-surface-border rounded text-gray-400 hover:text-white disabled:opacity-30 transition-colors"
             >
               Next →

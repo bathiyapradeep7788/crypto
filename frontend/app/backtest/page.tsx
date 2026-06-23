@@ -5,11 +5,11 @@ import CoinSelector           from '@/components/backtest/CoinSelector'
 import StrategySelector       from '@/components/backtest/StrategySelector'
 import StrategyParams         from '@/components/backtest/StrategyParams'
 import ResultsTable           from '@/components/backtest/ResultsTable'
-import { useBacktest }        from '@/hooks/useBacktest'
+import { useBacktestCtx }     from '@/context/BacktestContext'
 import { DEFAULT_PARAMS, INTERVALS } from '@/lib/constants'
 
 export default function BacktestPage() {
-  const { run, status, progress, results, error } = useBacktest()
+  const { run, status, progress, results, error } = useBacktestCtx()
 
   const [coins,       setCoins]       = useState<string[]>(['BTCUSDT', 'ETHUSDT'])
   const [startDt,     setStartDt]     = useState('2024-01-01T00:00')
