@@ -5,6 +5,7 @@ from app.services.strategy_engine import get_signal, STRATEGY_MAP
 from app.services.combined_store import COMBO_PREFIX, get_combined
 from app.services.trade_simulator import simulate_trade
 from app.services.db_writer import save_trade
+from app.services import job_store
 from app.core.logger import emit_log
 
 
@@ -21,20 +22,20 @@ def _strategy_label(strategy_id: str, secondary_id: str = None) -> str:
     return label
 
 
-async def run_backtest_pipeline(job_id: str, req: BacktestRequest, jobs: dict):
+async def run_backtest_pipeline(job_id: str, req: BacktestRequest):
     all_results = []
     params = {p.key: p.value for p in req.params}
 
     strategies = req.resolved_strategies()
     if not strategies:
-        jobs[job_id]["status"] = "error"
+        job_store.finish_job(job_id, "error")
         await emit_log("ERROR", f"[{job_id}] No strategies selected")
         return
 
     # Total work units = strategies × coins (drives the progress bar).
-    jobs[job_id]["total"] = len(strategies) * len(req.coins)
-    jobs[job_id]["processed"] = 0
+    total = len(strategies) * len(req.coins)
     processed = 0
+    job_store.update_progress(job_id, 0, total)
 
     # Pre-fetch candles once per coin so every strategy reuses them.
     candle_cache: dict = {}
@@ -54,7 +55,8 @@ async def run_backtest_pipeline(job_id: str, req: BacktestRequest, jobs: dict):
                 if not candles:
                     await emit_log("WARN", f"[{job_id}] No candles for {coin} — skipping")
                     processed += 1
-                    jobs[job_id]["processed"] = processed
+                    if processed % 5 == 0:
+                        job_store.update_progress(job_id, processed, total)
                     continue
 
                 window = 60  # minimum candles needed before checking signals
@@ -93,14 +95,14 @@ async def run_backtest_pipeline(job_id: str, req: BacktestRequest, jobs: dict):
 
                 all_results.extend(coin_results)
                 processed += 1
-                jobs[job_id]["processed"] = processed
+                if processed % 5 == 0:
+                    job_store.update_progress(job_id, processed, total)
 
-        jobs[job_id]["status"]  = "done"
-        jobs[job_id]["results"] = _serialize(all_results)
+        job_store.finish_job(job_id, "done", _serialize(all_results))
         await emit_log("INFO", f"[{job_id}] Backtest complete — {len(all_results)} total trades across {len(strategies)} strategies")
 
     except Exception as e:
-        jobs[job_id]["status"] = "error"
+        job_store.finish_job(job_id, "error")
         await emit_log("ERROR", f"[{job_id}] Pipeline crashed: {str(e)}")
 
 
