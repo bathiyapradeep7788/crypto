@@ -17,3 +17,6 @@ Thumbs.db
 # IDE
 .vscode/
 .idea/
+
+# Private setup file — never push
+SETUP_AND_KEYS.txt
