@@ -88,7 +88,13 @@ async def delete_all_rows(table: str):
     if table not in ALLOWED_TABLES:
         raise HTTPException(status_code=400, detail="Invalid table")
     client = _get_client()
-    client.table(table).delete().neq("id", "00000000-0000-0000-0000-000000000000").execute()
+    # TRUNCATE via RPC — a row-by-row DELETE times out on large tables
+    # (backtest_results can have hundreds of thousands of rows).
+    try:
+        client.rpc("clear_table", {"tbl": table}).execute()
+    except Exception:
+        # Fallback for environments without the RPC
+        client.table(table).delete().neq("id", "00000000-0000-0000-0000-000000000000").execute()
     return {"cleared": table}
 
 
