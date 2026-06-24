@@ -16,6 +16,7 @@ def _row(trade: dict) -> dict:
         "end_position":         trade["end_position"],
         "win_loss_rate":        trade["win_loss_rate"],
         "profit_rate":          trade["profit_rate"],
+        "params":               trade.get("params", {}),
     }
 
 

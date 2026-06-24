@@ -1,11 +1,13 @@
 'use client'
-import { useState }          from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import TabBar                 from '@/components/layout/TabBar'
 import CoinSelector           from '@/components/backtest/CoinSelector'
 import StrategySelector       from '@/components/backtest/StrategySelector'
 import StrategyParams         from '@/components/backtest/StrategyParams'
 import ResultsTable           from '@/components/backtest/ResultsTable'
 import { useBacktestCtx }     from '@/context/BacktestContext'
+import { listCombined }       from '@/lib/api'
+import { CombinedStrategy }   from '@/types'
 import { DEFAULT_PARAMS, INTERVALS } from '@/lib/constants'
 
 export default function BacktestPage() {
@@ -17,23 +19,45 @@ export default function BacktestPage() {
   const [interval,    setInterval]    = useState('1h')
   const [strategies,  setStrategies]  = useState<string[]>(['rsi_macd'])
   const [paramValues, setParamValues] = useState<Record<string, number>>({})
+  const [combined,    setCombined]    = useState<CombinedStrategy[]>([])
   const [tpPct,  setTpPct]  = useState(2.0)
   const [tp2Pct, setTp2Pct] = useState(4.0)
   const [slPct,  setSlPct]  = useState(1.5)
 
-  // Param editing is only meaningful when exactly one built-in strategy is
-  // selected. With several strategies running together we use their standard
-  // defaults so each runs at its textbook settings.
-  const soloBuiltIn =
-    strategies.length === 1 && !strategies[0].startsWith('combo_') ? strategies[0] : null
+  // Keep a map of combined strategies so we can expand a combo into its two
+  // underlying built-in strategies (for showing their parameters).
+  useEffect(() => { listCombined().then(setCombined).catch(() => {}) }, [])
+
+  // Every built-in strategy whose params should be shown/edited: each selected
+  // built-in, plus the two sub-strategies of every selected combined strategy.
+  const paramStrategyIds = useMemo(() => {
+    const ids = new Set<string>()
+    for (const s of strategies) {
+      if (s.startsWith('combo_')) {
+        const c = combined.find(x => `combo_${x.id}` === s)
+        if (c) { ids.add(c.strategy_a); ids.add(c.strategy_b) }
+      } else {
+        ids.add(s)
+      }
+    }
+    return Array.from(ids)
+  }, [strategies, combined])
 
   const setParam = (key: string, val: number) =>
     setParamValues(prev => ({ ...prev, [key]: val }))
 
+  // Send edited params for every involved strategy (flat key/value list).
   const buildParams = () => {
-    if (!soloBuiltIn) return []
-    const defaults = DEFAULT_PARAMS[soloBuiltIn] ?? []
-    return defaults.map(f => ({ key: f.key, value: paramValues[f.key] ?? f.default }))
+    const out: { key: string; value: number }[] = []
+    const seen = new Set<string>()
+    for (const id of paramStrategyIds) {
+      for (const f of DEFAULT_PARAMS[id] ?? []) {
+        if (seen.has(f.key)) continue
+        seen.add(f.key)
+        out.push({ key: f.key, value: paramValues[f.key] ?? f.default })
+      }
+    }
+    return out
   }
 
   const handleRun = () => {
@@ -117,16 +141,8 @@ export default function BacktestPage() {
               onChange={setStrategies}
             />
 
-            {!soloBuiltIn && (
-              <p className="text-xs text-gray-500 italic px-1">
-                {strategies.length > 1
-                  ? `Running ${strategies.length} strategies — each uses its standard parameters.`
-                  : 'Combined/multiple selection — standard parameters are used.'}
-              </p>
-            )}
-
             <StrategyParams
-              strategyId={soloBuiltIn ?? ''}
+              strategyIds={paramStrategyIds}
               values={paramValues}
               onChange={setParam}
               tpPct={tpPct} tp2Pct={tp2Pct} slPct={slPct}

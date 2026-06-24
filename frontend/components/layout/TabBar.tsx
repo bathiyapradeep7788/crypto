@@ -7,6 +7,7 @@ const TABS = [
   { href: '/paper-trade',  label: 'Paper Trade'        },
   { href: '/live-trade',   label: 'Live Actual Trade'  },
   { href: '/database',     label: 'Database'           },
+  { href: '/reports',      label: 'Reports'            },
   { href: '/vercel-logs',  label: 'Vercel Logs'        },
   { href: '/logs',         label: 'System Logs'        },
 ]

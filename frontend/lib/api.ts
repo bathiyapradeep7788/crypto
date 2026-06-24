@@ -99,6 +99,22 @@ export async function deleteCombined(id: string): Promise<void> {
   await fetch(`${BASE}/strategies/combined/${id}`, { method: 'DELETE' })
 }
 
+// ── Reports ───────────────────────────────────────────────────
+export async function getReportCoins(): Promise<string[]> {
+  try {
+    const d = await getJSON<{ coins: string[] }>('/reports/coins')
+    return d.coins ?? []
+  } catch { return [] }
+}
+
+export async function getCoinReport(coin: string): Promise<any> {
+  return getJSON(`/reports/coin/${coin}`)
+}
+
+export function coinReportTextUrl(coin: string): string {
+  return `${BASE}/reports/coin/${coin}/text`
+}
+
 // ── Paper Trade ───────────────────────────────────────────────
 export async function startPaperTrade(config: TradeSessionConfig): Promise<{ session_id: string }> {
   const res = await fetch(`${BASE}/paper-trade/start`, {

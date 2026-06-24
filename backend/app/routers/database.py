@@ -50,9 +50,20 @@ async def get_distinct(table: str, column: str):
     if column not in {"coin", "strategy"}:
         raise HTTPException(status_code=400, detail="Invalid column")
     client = _get_client()
-    res = client.table(table).select(column).limit(2000).execute()
-    values = sorted({r[column] for r in res.data if r.get(column)})
-    return {"values": values}
+    # PostgREST caps a single response at ~1000 rows, so paginate to collect
+    # every distinct value rather than missing coins/strategies.
+    values: set = set()
+    offset, page = 0, 1000
+    while offset < 50000:
+        res = client.table(table).select(column).range(offset, offset + page - 1).execute()
+        batch = res.data or []
+        for r in batch:
+            if r.get(column):
+                values.add(r[column])
+        if len(batch) < page:
+            break
+        offset += page
+    return {"values": sorted(values)}
 
 
 @router.delete("/rows/{table}/{row_id}")

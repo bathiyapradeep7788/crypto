@@ -85,6 +85,7 @@ async def run_backtest_pipeline(job_id: str, req: BacktestRequest):
                     result["coin"]                 = coin
                     result["strategy"]             = label
                     result["complete_calculation"] = meta
+                    result["params"]               = params
 
                     coin_results.append(result)
 
