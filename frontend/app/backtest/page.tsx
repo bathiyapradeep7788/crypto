@@ -11,7 +11,7 @@ import { CombinedStrategy }   from '@/types'
 import { DEFAULT_PARAMS, INTERVALS } from '@/lib/constants'
 
 export default function BacktestPage() {
-  const { run, status, progress, results, error } = useBacktestCtx()
+  const { run, stop, status, progress, results, error } = useBacktestCtx()
 
   const [coins,       setCoins]       = useState<string[]>(['BTCUSDT', 'ETHUSDT'])
   const [startDt,     setStartDt]     = useState('2024-01-01T00:00')
@@ -35,7 +35,10 @@ export default function BacktestPage() {
     for (const s of strategies) {
       if (s.startsWith('combo_')) {
         const c = combined.find(x => `combo_${x.id}` === s)
-        if (c) { ids.add(c.strategy_a); ids.add(c.strategy_b) }
+        if (c) {
+          const mem = c.members && c.members.length ? c.members : [c.strategy_a, c.strategy_b].filter(Boolean)
+          mem.forEach(m => ids.add(m))
+        }
       } else {
         ids.add(s)
       }
@@ -155,19 +158,29 @@ export default function BacktestPage() {
               </div>
             )}
 
-            <button
-              onClick={handleRun}
-              disabled={isRunning}
-              className={`w-full py-3 rounded-lg font-semibold text-sm transition-all ${
-                isRunning
-                  ? 'bg-surface-border text-gray-500 cursor-not-allowed'
-                  : 'bg-brand hover:bg-brand-dark text-black'
-              }`}
-            >
-              {isRunning ? `Running... (${progress.processed}/${progress.total})` : '▶ Run Backtest'}
-            </button>
+            <div className="flex gap-3">
+              <button
+                onClick={handleRun}
+                disabled={isRunning}
+                className={`flex-1 py-3 rounded-lg font-semibold text-sm transition-all ${
+                  isRunning
+                    ? 'bg-surface-border text-gray-500 cursor-not-allowed'
+                    : 'bg-brand hover:bg-brand-dark text-black'
+                }`}
+              >
+                {isRunning ? `Running... (${progress.processed}/${progress.total})` : '▶ Run Backtest'}
+              </button>
+              {isRunning && (
+                <button
+                  onClick={stop}
+                  className="px-6 py-3 rounded-lg font-semibold text-sm bg-red-600 hover:bg-red-700 text-white transition-all"
+                >
+                  ⏹ Stop
+                </button>
+              )}
+            </div>
 
-            {status === 'done' && <ResultsTable results={results} />}
+            {(status === 'done' || (status === 'idle' && results.length > 0)) && <ResultsTable results={results} />}
           </div>
         </div>
       </main>

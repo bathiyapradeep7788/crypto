@@ -26,12 +26,15 @@ export async function getJSON<T>(path: string, retries = 6, delayMs = 2500): Pro
 // ── Backtest ──────────────────────────────────────────────────
 // Runs synchronously on the backend and returns results in the response.
 // Retries on cold-start 503; allows a long timeout for the computation.
-export async function runBacktest(config: BacktestConfig, retries = 3): Promise<{ results: TradeResult[] }> {
+export async function runBacktest(config: BacktestConfig, retries = 3, externalSignal?: AbortSignal): Promise<{ results: TradeResult[] }> {
   let lastErr: any
   for (let i = 0; i <= retries; i++) {
+    if (externalSignal?.aborted) throw new DOMException('stopped', 'AbortError')
     try {
       const ctrl = new AbortController()
       const t = setTimeout(() => ctrl.abort(), 110000)
+      const onAbort = () => ctrl.abort()
+      externalSignal?.addEventListener('abort', onAbort)
       const res = await fetch(`${BASE}/backtest/run`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -39,12 +42,15 @@ export async function runBacktest(config: BacktestConfig, retries = 3): Promise<
         signal: ctrl.signal,
       })
       clearTimeout(t)
+      externalSignal?.removeEventListener('abort', onAbort)
       if (res.status === 503 || res.status === 502 || res.status === 504) {
         throw new Error(`warming up (${res.status})`)
       }
       if (!res.ok) throw new Error(`API error: ${res.status}`)
       return res.json()
-    } catch (e) {
+    } catch (e: any) {
+      // User pressed Stop → abort immediately, don't retry
+      if (externalSignal?.aborted || e?.name === 'AbortError') throw new DOMException('stopped', 'AbortError')
       lastErr = e
       if (i < retries) await new Promise(r => setTimeout(r, 2500))
     }
@@ -71,7 +77,7 @@ export async function listCombined(): Promise<CombinedStrategy[]> {
 }
 
 export async function createCombined(payload: {
-  name: string; strategy_a: string; strategy_b: string; params?: Record<string, number>
+  name: string; members: string[]; params?: Record<string, number>
 }): Promise<CombinedStrategy> {
   const res = await fetch(`${BASE}/strategies/combined`, {
     method: 'POST',
@@ -84,7 +90,7 @@ export async function createCombined(payload: {
 
 export async function updateCombined(
   id: string,
-  payload: Partial<{ name: string; strategy_a: string; strategy_b: string; params: Record<string, number> }>
+  payload: Partial<{ name: string; members: string[]; params: Record<string, number> }>
 ): Promise<CombinedStrategy> {
   const res = await fetch(`${BASE}/strategies/combined/${id}`, {
     method: 'PUT',

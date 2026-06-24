@@ -5,7 +5,7 @@ import { useBacktestCtx } from '@/context/BacktestContext'
 // Global completion popup — shows on whatever tab you're on when a backtest
 // finishes, since the run lives in the provider, not a single page.
 export default function Toast() {
-  const { notification, dismiss, status, progress } = useBacktestCtx()
+  const { notification, dismiss, status, progress, stop } = useBacktestCtx()
 
   useEffect(() => {
     if (notification) {
@@ -24,6 +24,7 @@ export default function Toast() {
             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
           </svg>
           Backtest running… {progress.processed}/{progress.total} strategies
+          <button onClick={stop} className="ml-2 px-2 py-0.5 rounded bg-red-600 hover:bg-red-700 text-white text-xs">⏹ Stop</button>
         </div>
       )}
 

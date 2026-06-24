@@ -7,6 +7,7 @@ interface StratStat {
   name: string; trades: number; wins: number; losses: number
   win_rate: number; total_pnl: number; avg_pnl: number; score: number
   best_trade: number; worst_trade: number
+  tp1: number; tp2: number; sl: number; expired: number; tp2_rate: number
   best_params?: { params: Record<string, number>; win_rate: number; total_pnl: number; trades: number } | null
   param_variants?: any[]
 }
@@ -89,7 +90,7 @@ export default function ReportsPage() {
                 <table className="w-full text-xs">
                   <thead className="border-b border-surface-border">
                     <tr className="text-gray-500 text-left">
-                      {['#','Strategy','Score','Trades','Win Rate','W/L','Net PnL','Avg','Best','Worst','Best Params'].map(h => (
+                      {['#','Strategy','Score','Trades','Win Rate','W/L','Net PnL','Avg','TP1','TP2','SL','TP2 %','Best Params'].map(h => (
                         <th key={h} className="px-3 py-2 font-medium whitespace-nowrap">{h}</th>
                       ))}
                     </tr>
@@ -105,8 +106,10 @@ export default function ReportsPage() {
                         <td className="px-3 py-2 font-mono"><span className="text-green-400">{s.wins}</span>/<span className="text-red-400">{s.losses}</span></td>
                         <td className={`px-3 py-2 font-mono font-semibold ${s.total_pnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>{s.total_pnl >= 0 ? '+' : ''}{s.total_pnl}%</td>
                         <td className="px-3 py-2 font-mono text-gray-400">{s.avg_pnl}%</td>
-                        <td className="px-3 py-2 font-mono text-green-400">{s.best_trade}%</td>
-                        <td className="px-3 py-2 font-mono text-red-400">{s.worst_trade}%</td>
+                        <td className="px-3 py-2 font-mono text-green-300">{s.tp1}</td>
+                        <td className="px-3 py-2 font-mono text-green-400">{s.tp2}</td>
+                        <td className="px-3 py-2 font-mono text-red-400">{s.sl}</td>
+                        <td className="px-3 py-2 font-mono text-brand">{s.tp2_rate}%</td>
                         <td className="px-3 py-2 font-mono text-gray-400 max-w-xs truncate">{fmtParams(s.best_params?.params)}</td>
                       </tr>
                     ))}

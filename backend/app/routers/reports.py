@@ -16,6 +16,23 @@ router = APIRouter()
 
 MIN_TRADES = 5  # ignore strategies with too few trades when recommending
 
+# Textbook default parameters per built-in strategy — used to show concrete
+# parameter values in reports for runs that used the standard settings (those
+# trades were saved with an empty params object before per-trade params existed).
+STRATEGY_DEFAULTS = {
+    "rsi_macd": {"rsi_period": 14, "rsi_overbought": 70, "rsi_oversold": 30,
+                 "macd_fast": 12, "macd_slow": 26, "macd_signal": 9},
+    "ema_crossover": {"ema_fast": 21, "ema_slow": 55},
+    "bollinger_squeeze": {"bb_period": 20, "bb_std": 2.0},
+    "vwap_mean_reversion": {"vwap_deviation": 0.5},
+    "support_resistance": {"sr_tolerance": 0.3},
+    "ichimoku": {"tenkan": 9, "kijun": 26},
+    "stoch_rsi_volume": {"stoch_overbought": 80, "stoch_oversold": 20},
+    "ict_order_block": {},
+    "fibonacci": {"fib_tolerance": 0.3},
+    "volume_momentum": {"vol_spike_mult": 2.0},
+}
+
 
 def _client():
     if not settings.supabase_url or not settings.supabase_key:
@@ -44,6 +61,11 @@ def _agg(trades: list) -> dict:
     losses = n - wins
     pnls = [float(t.get("profit_rate") or 0) for t in trades]
     total = sum(pnls)
+    # How exits resolved — did price reach TP1, run all the way to TP2, or stop out?
+    tp1 = sum(1 for t in trades if t.get("end_position") == "Hit TP1")
+    tp2 = sum(1 for t in trades if t.get("end_position") == "Hit TP2")
+    sl = sum(1 for t in trades if t.get("end_position") == "Hit SL")
+    expired = n - tp1 - tp2 - sl
     return {
         "trades": n,
         "wins": wins,
@@ -53,6 +75,11 @@ def _agg(trades: list) -> dict:
         "avg_pnl": round(total / n, 3) if n else 0.0,
         "best_trade": round(max(pnls), 2) if pnls else 0.0,
         "worst_trade": round(min(pnls), 2) if pnls else 0.0,
+        "tp1": tp1,
+        "tp2": tp2,
+        "sl": sl,
+        "expired": expired,
+        "tp2_rate": round(tp2 / n * 100, 1) if n else 0.0,
     }
 
 
@@ -73,10 +100,15 @@ def _analyze(coin: str) -> dict:
         by_params: dict = defaultdict(list)
         for t in trades:
             by_params[json.dumps(t.get("params") or {}, sort_keys=True)].append(t)
+        defaults = STRATEGY_DEFAULTS.get(name, {})
         param_variants = []
         for pkey, ptrades in by_params.items():
             ps = _agg(ptrades)
-            ps["params"] = json.loads(pkey)
+            used = json.loads(pkey)
+            # Runs saved before per-trade params existed have {} — show the
+            # textbook defaults that were actually in effect for that strategy.
+            ps["params"] = used if used else dict(defaults)
+            ps["used_defaults"] = not used
             param_variants.append(ps)
         param_variants.sort(key=lambda x: (x["win_rate"], x["total_pnl"]), reverse=True)
         stat["name"] = name
@@ -151,6 +183,12 @@ async def report_coin_text(coin: str):
         L.append(f"   Trades {s['trades']} | Win {s['win_rate']}% ({s['wins']}W/{s['losses']}L) "
                  f"| Net PnL {s['total_pnl']}% | Avg {s['avg_pnl']}% "
                  f"| Best {s['best_trade']}% | Worst {s['worst_trade']}%")
+        L.append(f"   Exits: TP1 {s['tp1']} | TP2 {s['tp2']} ({s['tp2_rate']}% ran to TP2) "
+                 f"| SL {s['sl']} | Expired {s['expired']}")
+        bp = s.get("best_params")
+        if bp and bp.get("params"):
+            tag = " (defaults)" if bp.get("used_defaults") else ""
+            L.append(f"   Params{tag}: {json.dumps(bp['params'])}")
         if len(s.get("param_variants", [])) > 1:
             L.append(f"   Param sets tested: {len(s['param_variants'])} "
                      f"(best: {json.dumps(s['best_params']['params'])})")

@@ -7,7 +7,7 @@ from app.strategies.all_strategies import (
     IchimokuStrategy, StochRsiVolumeStrategy, IctOrderBlockStrategy,
     FibonacciStrategy, VolumeMomentumStrategy,
 )
-from app.services.combined_store import COMBO_PREFIX, get_combined
+from app.services.combined_store import COMBO_PREFIX, get_combined, members_of
 
 STRATEGY_MAP = {
     "rsi_macd":            RsiMacdStrategy,
@@ -39,13 +39,13 @@ def get_signal(
     If `secondary_id` is set (legacy single-run confluence), both strategies
     must agree on direction.
     """
-    # Combined strategy → resolve to A AND B
+    # Combined strategy → resolve to AND across all member strategies
     if strategy_id.startswith(COMBO_PREFIX):
         combo = get_combined(strategy_id[len(COMBO_PREFIX):])
         if not combo:
             return None
         combo_params = {**(combo.get("params") or {}), **params}
-        return _confluence(combo["strategy_a"], combo["strategy_b"], combo_params, candles)
+        return _confluence(members_of(combo), combo_params, candles)
 
     cls = STRATEGY_MAP.get(strategy_id)
     if not cls:
@@ -56,26 +56,31 @@ def get_signal(
         return None
 
     if secondary_id:
-        return _confluence(strategy_id, secondary_id, params, candles)
+        return _confluence([strategy_id, secondary_id], params, candles)
 
     return result
 
 
 def _confluence(
-    id_a: str, id_b: str, params: dict, candles: List[Dict]
+    ids: List[str], params: dict, candles: List[Dict]
 ) -> Optional[Tuple[str, Dict]]:
-    """AND logic: signal fires only when both strategies agree on direction."""
-    cls_a = STRATEGY_MAP.get(id_a)
-    cls_b = STRATEGY_MAP.get(id_b)
-    if not cls_a or not cls_b:
+    """AND logic: a signal fires only when EVERY member strategy produces a
+    signal in the same direction. Metadata from all members is merged."""
+    ids = [i for i in ids if i in STRATEGY_MAP]
+    if len(ids) < 2:
         return None
 
-    res_a = cls_a(params).generate_signal(candles)
-    if res_a is None:
-        return None
-    res_b = cls_b(params).generate_signal(candles)
-    if res_b is None or res_b[0] != res_a[0]:
-        return None  # no confluence
-
-    merged_meta = {**res_a[1], **{f"s2_{k}": v for k, v in res_b[1].items()}}
-    return (res_a[0], merged_meta)
+    direction = None
+    merged: Dict = {}
+    for idx, sid in enumerate(ids):
+        res = STRATEGY_MAP[sid](params).generate_signal(candles)
+        if res is None:
+            return None
+        d, meta = res
+        if direction is None:
+            direction = d
+        elif d != direction:
+            return None  # members disagree → no signal
+        prefix = "" if idx == 0 else f"s{idx + 1}_"
+        merged.update({f"{prefix}{k}": v for k, v in meta.items()})
+    return (direction, merged)

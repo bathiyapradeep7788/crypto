@@ -2,7 +2,7 @@ import asyncio
 from app.models.backtest_request import BacktestRequest
 from app.services.binance_client import fetch_klines
 from app.services.strategy_engine import get_signal, STRATEGY_MAP
-from app.services.combined_store import COMBO_PREFIX, get_combined
+from app.services.combined_store import COMBO_PREFIX, get_combined, members_of
 from app.services.trade_simulator import simulate_trade
 from app.services.db_writer import save_trades
 from app.services import job_store
@@ -14,7 +14,7 @@ def _strategy_label(strategy_id: str, secondary_id: str = None) -> str:
     if strategy_id.startswith(COMBO_PREFIX):
         combo = get_combined(strategy_id[len(COMBO_PREFIX):])
         if combo:
-            return f"{combo['name']} ({combo['strategy_a']} + {combo['strategy_b']})"
+            return f"{combo['name']} ({' + '.join(members_of(combo))})"
         return strategy_id
     label = strategy_id
     if secondary_id:

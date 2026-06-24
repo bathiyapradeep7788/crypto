@@ -14,6 +14,7 @@ interface BacktestState {
   error: string | null
   notification: Notification | null
   run: (config: BacktestConfig) => void
+  stop: () => void
   dismiss: () => void
 }
 
@@ -26,10 +27,13 @@ export function BacktestProvider({ children }: { children: React.ReactNode }) {
   const [error, setError]       = useState<string | null>(null)
   const [notification, setNotification] = useState<Notification | null>(null)
   const runningRef = useRef(false)
+  const cancelledRef = useRef(false)
+  const abortRef = useRef<AbortController | null>(null)
 
   const run = useCallback(async (config: BacktestConfig) => {
     if (runningRef.current) return
     runningRef.current = true
+    cancelledRef.current = false
     setStatus('running'); setResults([]); setError(null); setNotification(null)
 
     // One strategy per request — keeps each serverless call bounded and lets
@@ -38,20 +42,29 @@ export function BacktestProvider({ children }: { children: React.ReactNode }) {
     setProgress({ processed: 0, total: strategies.length })
     const acc: TradeResult[] = []
     let failures = 0
+    let stopped = false
 
     for (let i = 0; i < strategies.length; i++) {
+      if (cancelledRef.current) { stopped = true; break }
+      const ctrl = new AbortController()
+      abortRef.current = ctrl
       try {
-        const res = await runBacktest({ ...config, strategies: [strategies[i]] })
+        const res = await runBacktest({ ...config, strategies: [strategies[i]] }, 3, ctrl.signal)
         acc.push(...(res.results ?? []))
         setResults([...acc])
-      } catch {
+      } catch (e: any) {
+        if (cancelledRef.current || e?.name === 'AbortError') { stopped = true; break }
         failures += 1
       }
       setProgress({ processed: i + 1, total: strategies.length })
     }
 
     runningRef.current = false
-    if (failures === strategies.length) {
+    abortRef.current = null
+    if (stopped) {
+      setStatus('idle')
+      setNotification({ kind: 'error', text: `⏹ Backtest stopped — ${acc.length} trades saved so far.` })
+    } else if (failures === strategies.length) {
       setError('Backtest failed — backend busy or range too large. Try fewer coins / shorter range.')
       setStatus('error')
       setNotification({ kind: 'error', text: 'Backtest failed — try fewer coins or a shorter range.' })
@@ -65,10 +78,15 @@ export function BacktestProvider({ children }: { children: React.ReactNode }) {
     }
   }, [])
 
+  const stop = useCallback(() => {
+    cancelledRef.current = true
+    abortRef.current?.abort()
+  }, [])
+
   const dismiss = useCallback(() => setNotification(null), [])
 
   return (
-    <Ctx.Provider value={{ status, progress, results, error, notification, run, dismiss }}>
+    <Ctx.Provider value={{ status, progress, results, error, notification, run, stop, dismiss }}>
       {children}
     </Ctx.Provider>
   )

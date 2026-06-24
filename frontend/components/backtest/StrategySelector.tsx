@@ -21,8 +21,7 @@ export default function StrategySelector({ selected, onChange }: Props) {
   // Builder / edit state
   const [editId, setEditId] = useState<string | null>(null)
   const [name, setName] = useState('')
-  const [stratA, setStratA] = useState(STRATEGIES[0].id)
-  const [stratB, setStratB] = useState(STRATEGIES[1].id)
+  const [members, setMembers] = useState<string[]>([])
 
   const refresh = () => listCombined().then(setCombined).catch(() => {})
   useEffect(() => { refresh() }, [])
@@ -39,24 +38,28 @@ export default function StrategySelector({ selected, onChange }: Props) {
   }
 
   const openCreate = () => {
-    setEditId(null); setName(''); setStratA(STRATEGIES[0].id); setStratB(STRATEGIES[1].id)
+    setEditId(null); setName(''); setMembers([])
     setErr(null); setShowBuilder(true)
   }
   const openEdit = (c: CombinedStrategy) => {
-    setEditId(c.id); setName(c.name); setStratA(c.strategy_a); setStratB(c.strategy_b)
+    setEditId(c.id); setName(c.name)
+    setMembers(c.members && c.members.length ? c.members : [c.strategy_a, c.strategy_b].filter(Boolean))
     setErr(null); setShowBuilder(true)
   }
+
+  const toggleMember = (id: string) =>
+    setMembers(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
 
   const save = async () => {
     setErr(null)
     if (!name.trim()) { setErr('Enter a name'); return }
-    if (stratA === stratB) { setErr('Pick two different strategies'); return }
+    if (members.length < 2) { setErr('Pick at least two strategies'); return }
     setBusy(true)
     try {
       if (editId) {
-        await updateCombined(editId, { name: name.trim(), strategy_a: stratA, strategy_b: stratB })
+        await updateCombined(editId, { name: name.trim(), members })
       } else {
-        await createCombined({ name: name.trim(), strategy_a: stratA, strategy_b: stratB })
+        await createCombined({ name: name.trim(), members })
       }
       setShowBuilder(false)
       await refresh()
@@ -148,7 +151,7 @@ export default function StrategySelector({ selected, onChange }: Props) {
                 <span className="flex-1">
                   <span className="font-medium">{c.name}</span>
                   <span className="text-gray-500 ml-2">
-                    {labelFor(c.strategy_a)} + {labelFor(c.strategy_b)}
+                    {(c.members && c.members.length ? c.members : [c.strategy_a, c.strategy_b].filter(Boolean)).map(labelFor).join(' + ')}
                   </span>
                 </span>
                 <button onClick={() => openEdit(c)} className="text-gray-500 hover:text-brand">Edit</button>
@@ -164,30 +167,28 @@ export default function StrategySelector({ selected, onChange }: Props) {
         <div className="border border-dashed border-surface-border rounded p-3 space-y-3">
           <p className="text-xs font-semibold text-gray-300">
             {editId ? 'Edit Combined Strategy' : 'New Combined Strategy'}
-            <span className="text-gray-500 font-normal"> — both must agree (AND)</span>
+            <span className="text-gray-500 font-normal"> — pick 2+; ALL must agree (AND)</span>
           </p>
           <input
             value={name}
             onChange={e => setName(e.target.value)}
-            placeholder="Strategy name (e.g. RSI+EMA Confluence)"
+            placeholder="Strategy name (e.g. RSI+EMA+Ichimoku Confluence)"
             className="w-full bg-surface border border-surface-border rounded px-3 py-1.5 text-sm text-white focus:outline-none focus:border-brand"
           />
           <div className="grid grid-cols-2 gap-2">
-            <select
-              value={stratA}
-              onChange={e => setStratA(e.target.value)}
-              className="bg-surface border border-surface-border rounded px-2 py-1.5 text-xs text-white focus:outline-none focus:border-brand"
-            >
-              {STRATEGIES.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
-            </select>
-            <select
-              value={stratB}
-              onChange={e => setStratB(e.target.value)}
-              className="bg-surface border border-surface-border rounded px-2 py-1.5 text-xs text-white focus:outline-none focus:border-brand"
-            >
-              {STRATEGIES.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
-            </select>
+            {STRATEGIES.map(s => (
+              <label
+                key={s.id}
+                className={`flex items-center gap-2 px-2 py-1.5 rounded border cursor-pointer text-xs transition-colors ${
+                  members.includes(s.id) ? 'border-brand bg-brand/10 text-white' : 'border-surface-border text-gray-400 hover:border-gray-500'
+                }`}
+              >
+                <input type="checkbox" checked={members.includes(s.id)} onChange={() => toggleMember(s.id)} className="accent-brand" />
+                {s.label}
+              </label>
+            ))}
           </div>
+          <p className="text-xs text-gray-500">{members.length} selected{members.length >= 2 ? ` — signal fires only when all ${members.length} agree` : ''}</p>
           {err && <p className="text-xs text-red-400">{err}</p>}
           <div className="flex gap-2">
             <button

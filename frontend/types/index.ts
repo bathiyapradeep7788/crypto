@@ -18,6 +18,7 @@ export interface BacktestConfig {
 export interface CombinedStrategy {
   id: string
   name: string
+  members: string[]
   strategy_a: string
   strategy_b: string
   logic: string
