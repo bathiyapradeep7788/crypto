@@ -5,7 +5,7 @@ import { getReportCoins, getCoinReport, coinReportTextUrl } from '@/lib/api'
 
 interface StratStat {
   name: string; trades: number; wins: number; losses: number
-  win_rate: number; total_pnl: number; avg_pnl: number
+  win_rate: number; total_pnl: number; avg_pnl: number; score: number
   best_trade: number; worst_trade: number
   best_params?: { params: Record<string, number>; win_rate: number; total_pnl: number; trades: number } | null
   param_variants?: any[]
@@ -89,7 +89,7 @@ export default function ReportsPage() {
                 <table className="w-full text-xs">
                   <thead className="border-b border-surface-border">
                     <tr className="text-gray-500 text-left">
-                      {['#','Strategy','Trades','Win Rate','W/L','Net PnL','Avg','Best','Worst','Best Params'].map(h => (
+                      {['#','Strategy','Score','Trades','Win Rate','W/L','Net PnL','Avg','Best','Worst','Best Params'].map(h => (
                         <th key={h} className="px-3 py-2 font-medium whitespace-nowrap">{h}</th>
                       ))}
                     </tr>
@@ -99,6 +99,7 @@ export default function ReportsPage() {
                       <tr key={s.name} className="border-b border-surface-border hover:bg-surface-hover">
                         <td className="px-3 py-2 text-gray-500">{i + 1}</td>
                         <td className="px-3 py-2 text-gray-200">{s.name}</td>
+                        <td className="px-3 py-2 font-mono text-brand font-semibold">{s.score}</td>
                         <td className="px-3 py-2 font-mono">{s.trades}</td>
                         <td className="px-3 py-2 font-mono text-brand">{s.win_rate}%</td>
                         <td className="px-3 py-2 font-mono"><span className="text-green-400">{s.wins}</span>/<span className="text-red-400">{s.losses}</span></td>

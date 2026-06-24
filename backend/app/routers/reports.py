@@ -65,6 +65,10 @@ def _analyze(coin: str) -> dict:
     strategies = []
     for name, trades in by_strategy.items():
         stat = _agg(trades)
+        # Balanced quality score: win-rate-weighted PnL — rewards strategies
+        # that both win often AND make money. (win_rate fraction × total PnL)
+        stat_score = round(stat["win_rate"] / 100 * stat["total_pnl"], 2)
+        stat["score"] = stat_score
         # best parameter set within this strategy
         by_params: dict = defaultdict(list)
         for t in trades:
@@ -80,11 +84,11 @@ def _analyze(coin: str) -> dict:
         stat["param_variants"] = param_variants
         strategies.append(stat)
 
-    # Rank: prefer strategies with enough trades, then win_rate, then total_pnl.
-    def score(s):
+    # Rank: prefer strategies with enough trades, then the balanced score.
+    def rank(s):
         eligible = s["trades"] >= MIN_TRADES
-        return (1 if eligible else 0, s["win_rate"], s["total_pnl"])
-    strategies.sort(key=score, reverse=True)
+        return (1 if eligible else 0, s["score"], s["win_rate"])
+    strategies.sort(key=rank, reverse=True)
 
     return {
         "coin": coin,
@@ -94,22 +98,21 @@ def _analyze(coin: str) -> dict:
     }
 
 
+def _distinct(rpc: str) -> list:
+    """Distinct values via a DB function — correct regardless of row count
+    (the table has hundreds of thousands of rows; client-side paging can't
+    see them all)."""
+    client = _client()
+    res = client.rpc(rpc).execute()
+    out = []
+    for row in res.data or []:
+        out.append(row if isinstance(row, str) else list(row.values())[0])
+    return sorted(v for v in out if v)
+
+
 @router.get("/coins")
 async def report_coins():
-    client = _client()
-    # Paginate — a single query is capped at ~1000 rows by PostgREST.
-    coins: set = set()
-    offset, page = 0, 1000
-    while offset < 50000:
-        res = client.table("backtest_results").select("coin").range(offset, offset + page - 1).execute()
-        batch = res.data or []
-        for r in batch:
-            if r.get("coin"):
-                coins.add(r["coin"])
-        if len(batch) < page:
-            break
-        offset += page
-    return {"coins": sorted(coins)}
+    return {"coins": _distinct("distinct_backtest_coins")}
 
 
 @router.get("/coin/{coin}")
@@ -144,7 +147,7 @@ async def report_coin_text(coin: str):
     L.append("ALL STRATEGIES (ranked best → worst)")
     L.append("-" * 60)
     for i, s in enumerate(a["strategies"], 1):
-        L.append(f"{i}. {s['name']}")
+        L.append(f"{i}. {s['name']}  (score {s['score']})")
         L.append(f"   Trades {s['trades']} | Win {s['win_rate']}% ({s['wins']}W/{s['losses']}L) "
                  f"| Net PnL {s['total_pnl']}% | Avg {s['avg_pnl']}% "
                  f"| Best {s['best_trade']}% | Worst {s['worst_trade']}%")
@@ -153,7 +156,8 @@ async def report_coin_text(coin: str):
                      f"(best: {json.dumps(s['best_params']['params'])})")
     L.append("")
     L.append("=" * 60)
-    L.append("Note: recommendation favours strategies with >= "
-             f"{MIN_TRADES} trades, then highest win rate, then PnL.")
+    L.append(f"Note: 'score' = win-rate-fraction x net PnL (balances winning often")
+    L.append(f"and making money). Recommendation favours strategies with >= {MIN_TRADES}")
+    L.append("trades, ranked by score.")
     L.append("=" * 60)
     return "\n".join(L)

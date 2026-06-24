@@ -50,8 +50,16 @@ async def get_distinct(table: str, column: str):
     if column not in {"coin", "strategy"}:
         raise HTTPException(status_code=400, detail="Invalid column")
     client = _get_client()
-    # PostgREST caps a single response at ~1000 rows, so paginate to collect
-    # every distinct value rather than missing coins/strategies.
+    # backtest_results can have hundreds of thousands of rows — use a DB-side
+    # DISTINCT function. Other tables are small, so paginate them.
+    if table == "backtest_results":
+        rpc = "distinct_backtest_coins" if column == "coin" else "distinct_backtest_strategies"
+        res = client.rpc(rpc).execute()
+        vals = []
+        for row in res.data or []:
+            vals.append(row if isinstance(row, str) else list(row.values())[0])
+        return {"values": sorted(v for v in vals if v)}
+
     values: set = set()
     offset, page = 0, 1000
     while offset < 50000:
