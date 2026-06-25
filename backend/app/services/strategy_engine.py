@@ -61,6 +61,40 @@ def get_signal(
     return result
 
 
+def get_voted_signal(
+    strategy_ids: List[str],
+    params: dict,
+    candles: List[Dict],
+    min_votes: int = 2,
+) -> Optional[Tuple[str, Dict]]:
+    """Vote system: fire when at least min_votes strategies agree on direction.
+    More flexible than AND-confluence — allows partial agreement."""
+    long_votes, short_votes = 0, 0
+    long_meta: Dict = {}
+    short_meta: Dict = {}
+
+    for sid in strategy_ids:
+        cls = STRATEGY_MAP.get(sid)
+        if not cls:
+            continue
+        res = cls(params).generate_signal(candles)
+        if res is None:
+            continue
+        d, meta = res
+        if d == "long":
+            long_votes += 1
+            long_meta.update({f"{sid}_{k}": v for k, v in meta.items()})
+        else:
+            short_votes += 1
+            short_meta.update({f"{sid}_{k}": v for k, v in meta.items()})
+
+    if long_votes >= min_votes:
+        return ("long", {**long_meta, "votes": long_votes, "total_strategies": len(strategy_ids)})
+    if short_votes >= min_votes:
+        return ("short", {**short_meta, "votes": short_votes, "total_strategies": len(strategy_ids)})
+    return None
+
+
 def _confluence(
     ids: List[str], params: dict, candles: List[Dict]
 ) -> Optional[Tuple[str, Dict]]:

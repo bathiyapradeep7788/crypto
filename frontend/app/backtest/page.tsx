@@ -10,6 +10,24 @@ import { listCombined }       from '@/lib/api'
 import { CombinedStrategy }   from '@/types'
 import { DEFAULT_PARAMS, INTERVALS } from '@/lib/constants'
 
+function Toggle({ label, sub, checked, onChange }: {
+  label: string; sub?: string; checked: boolean; onChange: (v: boolean) => void
+}) {
+  return (
+    <label className="flex items-start gap-3 cursor-pointer group">
+      <div className="relative mt-0.5 shrink-0">
+        <input type="checkbox" className="sr-only" checked={checked} onChange={e => onChange(e.target.checked)} />
+        <div className={`w-9 h-5 rounded-full transition-colors ${checked ? 'bg-brand' : 'bg-surface-border'}`} />
+        <div className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${checked ? 'translate-x-4' : ''}`} />
+      </div>
+      <div>
+        <p className="text-sm text-gray-200 group-hover:text-white transition-colors">{label}</p>
+        {sub && <p className="text-xs text-gray-500 mt-0.5">{sub}</p>}
+      </div>
+    </label>
+  )
+}
+
 export default function BacktestPage() {
   const { run, stop, status, progress, results, error } = useBacktestCtx()
 
@@ -24,12 +42,17 @@ export default function BacktestPage() {
   const [tp2Pct, setTp2Pct] = useState(4.0)
   const [slPct,  setSlPct]  = useState(1.5)
 
-  // Keep a map of combined strategies so we can expand a combo into its two
-  // underlying built-in strategies (for showing their parameters).
+  // Smart Filter state
+  const [useTrendFilter,   setUseTrendFilter]   = useState(false)
+  const [trendEmaPeriod,   setTrendEmaPeriod]   = useState(200)
+  const [useSessionFilter, setUseSessionFilter] = useState(false)
+  const [useAtrTpSl,       setUseAtrTpSl]       = useState(false)
+  const [atrTpMult,        setAtrTpMult]        = useState(2.0)
+  const [atrSlMult,        setAtrSlMult]        = useState(1.0)
+  const [minConfluence,    setMinConfluence]     = useState(1)
+
   useEffect(() => { listCombined().then(setCombined).catch(() => {}) }, [])
 
-  // Every built-in strategy whose params should be shown/edited: each selected
-  // built-in, plus the two sub-strategies of every selected combined strategy.
   const paramStrategyIds = useMemo(() => {
     const ids = new Set<string>()
     for (const s of strategies) {
@@ -49,7 +72,6 @@ export default function BacktestPage() {
   const setParam = (key: string, val: number) =>
     setParamValues(prev => ({ ...prev, [key]: val }))
 
-  // Send edited params for every involved strategy (flat key/value list).
   const buildParams = () => {
     const out: { key: string; value: number }[] = []
     const seen = new Set<string>()
@@ -76,10 +98,18 @@ export default function BacktestPage() {
       tp2_pct:  tp2Pct,
       sl_pct:   slPct,
       interval,
+      use_trend_filter:   useTrendFilter,
+      trend_ema_period:   trendEmaPeriod,
+      use_session_filter: useSessionFilter,
+      use_atr_tp_sl:      useAtrTpSl,
+      atr_tp_mult:        atrTpMult,
+      atr_sl_mult:        atrSlMult,
+      min_confluence:     minConfluence,
     })
   }
 
   const isRunning = status === 'running'
+  const activeFilterCount = [useTrendFilter, useSessionFilter, useAtrTpSl, minConfluence > 1].filter(Boolean).length
 
   return (
     <div className="min-h-screen bg-surface">
@@ -134,6 +164,117 @@ export default function BacktestPage() {
               </div>
             </div>
 
+            {/* ── Smart Filters ──────────────────────────────── */}
+            <div className="bg-surface-card border border-surface-border rounded-lg p-4 space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-semibold text-gray-300">Smart Filters</h3>
+                {activeFilterCount > 0 && (
+                  <span className="text-xs bg-brand/20 text-brand px-2 py-0.5 rounded-full font-semibold">
+                    {activeFilterCount} active
+                  </span>
+                )}
+              </div>
+
+              {/* Trend Filter */}
+              <Toggle
+                label="Trend Filter (EMA)"
+                sub="Only trade in direction of EMA trend — removes counter-trend losses"
+                checked={useTrendFilter}
+                onChange={setUseTrendFilter}
+              />
+              {useTrendFilter && (
+                <div className="ml-12 space-y-1">
+                  <label className="text-xs text-gray-500">EMA Period</label>
+                  <div className="flex items-center gap-2">
+                    {[50, 100, 200].map(v => (
+                      <button
+                        key={v}
+                        onClick={() => setTrendEmaPeriod(v)}
+                        className={`px-3 py-1 rounded text-xs font-semibold transition-colors ${
+                          trendEmaPeriod === v ? 'bg-brand text-black' : 'bg-surface text-gray-400 hover:text-white border border-surface-border'
+                        }`}
+                      >
+                        {v}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Session Filter */}
+              <Toggle
+                label="Session Filter (UTC 08–20)"
+                sub="Only trade during London + NY overlap — highest liquidity window"
+                checked={useSessionFilter}
+                onChange={setUseSessionFilter}
+              />
+
+              {/* ATR TP/SL */}
+              <Toggle
+                label="ATR-based TP / SL"
+                sub="Dynamic targets that adapt to current volatility instead of fixed %"
+                checked={useAtrTpSl}
+                onChange={setUseAtrTpSl}
+              />
+              {useAtrTpSl && (
+                <div className="ml-12 grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs text-gray-500 block mb-1">TP multiplier (×ATR)</label>
+                    <input
+                      type="number" step="0.5" min="0.5" max="10"
+                      value={atrTpMult}
+                      onChange={e => setAtrTpMult(Number(e.target.value))}
+                      className="w-full bg-surface border border-surface-border rounded px-2 py-1 text-sm text-white focus:outline-none focus:border-brand"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-gray-500 block mb-1">SL multiplier (×ATR)</label>
+                    <input
+                      type="number" step="0.5" min="0.5" max="5"
+                      value={atrSlMult}
+                      onChange={e => setAtrSlMult(Number(e.target.value))}
+                      className="w-full bg-surface border border-surface-border rounded px-2 py-1 text-sm text-white focus:outline-none focus:border-brand"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Confluence / Voting */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <div>
+                    <p className="text-sm text-gray-200">Confluence Votes</p>
+                    <p className="text-xs text-gray-500 mt-0.5">How many strategies must agree before a signal fires</p>
+                  </div>
+                  <span className={`text-sm font-bold font-mono px-2 py-0.5 rounded ${
+                    minConfluence > 1 ? 'bg-brand/20 text-brand' : 'bg-surface text-gray-400'
+                  }`}>
+                    {minConfluence === 1 ? 'OFF' : `≥ ${minConfluence}`}
+                  </span>
+                </div>
+                <div className="flex gap-2">
+                  {[1, 2, 3, 4].map(v => (
+                    <button
+                      key={v}
+                      onClick={() => setMinConfluence(v)}
+                      className={`flex-1 py-1.5 rounded text-xs font-semibold transition-colors ${
+                        minConfluence === v
+                          ? 'bg-brand text-black'
+                          : 'bg-surface text-gray-400 hover:text-white border border-surface-border'
+                      }`}
+                    >
+                      {v === 1 ? 'Off' : `${v} agree`}
+                    </button>
+                  ))}
+                </div>
+                {minConfluence > 1 && strategies.length < minConfluence && (
+                  <p className="text-xs text-yellow-400 mt-2">
+                    Select at least {minConfluence} strategies for voting to work
+                  </p>
+                )}
+              </div>
+            </div>
+
             <CoinSelector selected={coins} onChange={setCoins} />
           </div>
 
@@ -168,7 +309,10 @@ export default function BacktestPage() {
                     : 'bg-brand hover:bg-brand-dark text-black'
                 }`}
               >
-                {isRunning ? `Running... (${progress.processed}/${progress.total})` : '▶ Run Backtest'}
+                {isRunning
+                  ? `Running... (${progress.processed}/${progress.total})`
+                  : `▶ Run Backtest${activeFilterCount > 0 ? ` (${activeFilterCount} filter${activeFilterCount > 1 ? 's' : ''} on)` : ''}`
+                }
               </button>
               {isRunning && (
                 <button

@@ -82,17 +82,38 @@ class StochRsiVolumeStrategy(BaseStrategy):
 # ── ICT Order Block + FVG ────────────────────────────────────────────────────
 class IctOrderBlockStrategy(BaseStrategy):
     def generate_signal(self, candles: List[Dict]) -> Optional[Tuple[str, Dict]]:
-        if len(candles) < 10:
+        if len(candles) < 15:
             return None
         c = candles
         last = c[-1]
-        # Bullish FVG: gap between candle[-3].high and candle[-1].low
+
+        bullish_ob = False
+        bearish_ob = False
+
+        # Scan last 12 candles for order block: bearish candle followed by 2+
+        # bullish candles (impulse up) = bullish OB; price returning to that zone = long
+        for j in range(max(1, len(c) - 12), len(c) - 2):
+            if c[j]["close"] < c[j]["open"]:  # bearish candle = potential bullish OB
+                if c[j+1]["close"] > c[j+1]["open"] and c[j+2]["close"] > c[j+2]["open"]:
+                    if c[j]["low"] <= last["close"] <= c[j]["high"]:
+                        bullish_ob = True
+                        break
+            elif c[j]["close"] > c[j]["open"]:  # bullish candle = potential bearish OB
+                if c[j+1]["close"] < c[j+1]["open"] and c[j+2]["close"] < c[j+2]["open"]:
+                    if c[j]["low"] <= last["close"] <= c[j]["high"]:
+                        bearish_ob = True
+                        break
+
+        # FVG: gap between 3-candle window (extra confluence)
         fvg_bull = c[-3]["high"] < c[-1]["low"]
         fvg_bear = c[-3]["low"]  > c[-1]["high"]
-        meta = {"fvg_bull": fvg_bull, "fvg_bear": fvg_bear}
-        if fvg_bull and last["close"] > last["open"]:
+
+        meta = {"bullish_ob": bullish_ob, "bearish_ob": bearish_ob,
+                "fvg_bull": fvg_bull, "fvg_bear": fvg_bear}
+
+        if (bullish_ob or fvg_bull) and last["close"] > last["open"]:
             return ("long", meta)
-        if fvg_bear and last["close"] < last["open"]:
+        if (bearish_ob or fvg_bear) and last["close"] < last["open"]:
             return ("short", meta)
         return None
 
@@ -101,16 +122,37 @@ class FibonacciStrategy(BaseStrategy):
     def generate_signal(self, candles: List[Dict]) -> Optional[Tuple[str, Dict]]:
         if len(candles) < 50:
             return None
-        highs = self._highs(candles[-50:])
-        lows  = self._lows(candles[-50:])
-        swing_high = max(highs)
-        swing_low  = min(lows)
+        window = candles[-50:]
+        lookback = 3
+
+        # Detect proper pivot highs/lows using left/right bar comparison
+        pivot_highs, pivot_lows = [], []
+        for j in range(lookback, len(window) - lookback):
+            h = window[j]["high"]
+            l = window[j]["low"]
+            if all(h > window[k]["high"] for k in range(j - lookback, j)) and \
+               all(h > window[k]["high"] for k in range(j + 1, j + lookback + 1)):
+                pivot_highs.append(h)
+            if all(l < window[k]["low"] for k in range(j - lookback, j)) and \
+               all(l < window[k]["low"] for k in range(j + 1, j + lookback + 1)):
+                pivot_lows.append(l)
+
+        swing_high = max(pivot_highs) if pivot_highs else max(c["high"] for c in window)
+        swing_low  = min(pivot_lows)  if pivot_lows  else min(c["low"]  for c in window)
+
         diff = swing_high - swing_low
+        if diff == 0:
+            return None
+
         fib_618 = swing_high - 0.618 * diff
         fib_382 = swing_high - 0.382 * diff
+        fib_500 = swing_high - 0.500 * diff
         last = candles[-1]["close"]
-        tol = self.params.get("fib_tolerance", 0.3) / 100
-        meta = {"fib_618": round(fib_618, 4), "fib_382": round(fib_382, 4)}
+        tol = self.params.get("fib_tolerance", 0.5) / 100  # wider tolerance vs old 0.3
+
+        meta = {"fib_618": round(fib_618, 4), "fib_382": round(fib_382, 4),
+                "fib_500": round(fib_500, 4)}
+
         if abs(last - fib_618) / fib_618 <= tol:
             return ("long", meta)
         if abs(last - fib_382) / fib_382 <= tol:

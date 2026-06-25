@@ -7,27 +7,37 @@ def simulate_trade(
     tp_pct: float,
     tp2_pct: float,
     sl_pct: float,
+    atr: Optional[float] = None,
+    atr_tp_mult: float = 2.0,
+    atr_sl_mult: float = 1.0,
 ) -> Dict:
     entry = signal_candle["close"]
     multiplier = 1 if direction == "long" else -1
 
-    tp  = entry * (1 + multiplier * tp_pct  / 100)
-    tp2 = entry * (1 + multiplier * tp2_pct / 100)
-    sl  = entry * (1 - multiplier * sl_pct  / 100)
+    if atr and atr > 0:
+        # ATR-based dynamic TP/SL — adapts to current market volatility
+        tp  = entry + multiplier * atr * atr_tp_mult
+        tp2 = entry + multiplier * atr * atr_tp_mult * 2
+        sl  = entry - multiplier * atr * atr_sl_mult
+    else:
+        # Fixed percentage TP/SL
+        tp  = entry * (1 + multiplier * tp_pct  / 100)
+        tp2 = entry * (1 + multiplier * tp2_pct / 100)
+        sl  = entry * (1 - multiplier * sl_pct  / 100)
 
     for candle in future_candles:
         high, low = candle["high"], candle["low"]
 
-        if (direction == "long" and low <= sl) or \
+        if (direction == "long"  and low  <= sl) or \
            (direction == "short" and high >= sl):
             return _build_result(signal_candle, candle, entry, tp, tp2, sl, "Hit SL", "Loss")
 
-        if (direction == "long" and high >= tp2) or \
-           (direction == "short" and low <= tp2):
+        if (direction == "long"  and high >= tp2) or \
+           (direction == "short" and low  <= tp2):
             return _build_result(signal_candle, candle, entry, tp, tp2, sl, "Hit TP2", "Win")
 
-        if (direction == "long" and high >= tp) or \
-           (direction == "short" and low <= tp):
+        if (direction == "long"  and high >= tp) or \
+           (direction == "short" and low  <= tp):
             return _build_result(signal_candle, candle, entry, tp, tp2, sl, "Hit TP1", "Win")
 
     last = future_candles[-1] if future_candles else signal_candle

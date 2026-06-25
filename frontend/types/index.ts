@@ -13,6 +13,14 @@ export interface BacktestConfig {
   tp2_pct: number
   sl_pct: number
   interval: string
+  // Smart Filters
+  use_trend_filter?: boolean
+  trend_ema_period?: number
+  use_session_filter?: boolean
+  use_atr_tp_sl?: boolean
+  atr_tp_mult?: number
+  atr_sl_mult?: number
+  min_confluence?: number
 }
 
 export interface CombinedStrategy {

@@ -43,3 +43,26 @@ class BaseStrategy(ABC):
                 rs = avg_gain / avg_loss
                 rsi.append(100 - (100 / (1 + rs)))
         return rsi
+
+    def _atr(self, candles: list, period: int = 14) -> list:
+        tr_list = []
+        for i, c in enumerate(candles):
+            if i == 0:
+                tr_list.append(c["high"] - c["low"])
+            else:
+                prev_close = candles[i-1]["close"]
+                tr = max(
+                    c["high"] - c["low"],
+                    abs(c["high"] - prev_close),
+                    abs(c["low"] - prev_close),
+                )
+                tr_list.append(tr)
+        atr: list = []
+        for i in range(len(tr_list)):
+            if i < period - 1:
+                atr.append(None)
+            elif i == period - 1:
+                atr.append(sum(tr_list[:period]) / period)
+            else:
+                atr.append((atr[-1] * (period - 1) + tr_list[i]) / period)
+        return atr
