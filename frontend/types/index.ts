@@ -67,6 +67,7 @@ export interface TradeSessionConfig {
   coin: string
   strategy_primary: string
   strategy_secondary?: string
+  strategies?: string[]
   interval: string
   tp_pct: number
   tp2_pct: number
@@ -74,6 +75,10 @@ export interface TradeSessionConfig {
   trade_usdt: number
   virtual_balance?: number
   ai_min_confidence: number
+  use_trend_filter?: boolean
+  trend_ema_period?: number
+  use_session_filter?: boolean
+  min_confluence?: number
 }
 
 export interface OpenPosition {

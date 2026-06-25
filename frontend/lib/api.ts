@@ -30,29 +30,31 @@ export async function runBacktest(config: BacktestConfig, retries = 3, externalS
   let lastErr: any
   for (let i = 0; i <= retries; i++) {
     if (externalSignal?.aborted) throw new DOMException('stopped', 'AbortError')
+    const ctrl = new AbortController()
+    const onAbort = () => ctrl.abort()
+    externalSignal?.addEventListener('abort', onAbort)
+    const t = setTimeout(() => ctrl.abort(), 110000)
     try {
-      const ctrl = new AbortController()
-      const t = setTimeout(() => ctrl.abort(), 110000)
-      const onAbort = () => ctrl.abort()
-      externalSignal?.addEventListener('abort', onAbort)
       const res = await fetch(`${BASE}/backtest/run`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(config),
         signal: ctrl.signal,
       })
-      clearTimeout(t)
-      externalSignal?.removeEventListener('abort', onAbort)
       if (res.status === 503 || res.status === 502 || res.status === 504) {
         throw new Error(`warming up (${res.status})`)
       }
       if (!res.ok) throw new Error(`API error: ${res.status}`)
       return res.json()
     } catch (e: any) {
-      // User pressed Stop → abort immediately, don't retry
-      if (externalSignal?.aborted || e?.name === 'AbortError') throw new DOMException('stopped', 'AbortError')
+      // Only the external stop signal should halt the whole backtest.
+      // An internal timeout (ctrl.abort) counts as a regular failure → retry.
+      if (externalSignal?.aborted) throw new DOMException('stopped', 'AbortError')
       lastErr = e
       if (i < retries) await new Promise(r => setTimeout(r, 2500))
+    } finally {
+      clearTimeout(t)
+      externalSignal?.removeEventListener('abort', onAbort)
     }
   }
   throw lastErr

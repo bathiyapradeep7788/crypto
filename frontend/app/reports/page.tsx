@@ -69,19 +69,83 @@ export default function ReportsPage() {
         {report && report.strategies.length > 0 && (
           <div className="space-y-5">
             {/* Recommendation */}
-            {report.recommended && (
-              <div className="bg-gradient-to-r from-brand/15 to-surface-card border border-brand/40 rounded-lg p-5">
-                <p className="text-xs text-gray-400 uppercase tracking-wide">Recommended for {report.coin}</p>
-                <p className="text-2xl font-bold text-brand mt-1">{report.recommended.name}</p>
-                <div className="flex flex-wrap gap-5 mt-3 text-sm">
-                  <span className="text-gray-300">Win rate <b className="text-green-400">{report.recommended.win_rate}%</b></span>
-                  <span className="text-gray-300">Net PnL <b className={report.recommended.total_pnl >= 0 ? 'text-green-400' : 'text-red-400'}>{report.recommended.total_pnl}%</b></span>
-                  <span className="text-gray-300">{report.recommended.wins}W / {report.recommended.losses}L</span>
-                  <span className="text-gray-300">{report.recommended.trades} trades</span>
+            {report.recommended && (() => {
+              const r = report.recommended
+              const grade = r.win_rate >= 60 && r.total_pnl >= 5 ? 'A'
+                : r.win_rate >= 50 && r.total_pnl >= 0 ? 'B'
+                : r.win_rate >= 40 ? 'C'
+                : 'D'
+              const gradeColor = grade === 'A' ? 'text-green-400' : grade === 'B' ? 'text-brand' : grade === 'C' ? 'text-yellow-400' : 'text-red-400'
+              const second = report.strategies[1]
+              const pnlEdge = second ? (r.total_pnl - second.total_pnl).toFixed(2) : null
+              return (
+              <div className="bg-gradient-to-br from-brand/10 via-surface-card to-surface-card border border-brand/40 rounded-xl p-5">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex-1">
+                    <p className="text-xs text-gray-400 uppercase tracking-widest mb-1">Best strategy for {report.coin}</p>
+                    <p className="text-2xl font-bold text-brand">{r.name}</p>
+                    {r.best_params?.params && (
+                      <p className="text-xs text-gray-400 mt-1">Params: <span className="text-gray-200 font-mono">{fmtParams(r.best_params.params)}</span></p>
+                    )}
+                  </div>
+                  <div className="text-right shrink-0">
+                    <p className={`text-5xl font-black ${gradeColor}`}>{grade}</p>
+                    <p className="text-xs text-gray-500 mt-0.5">Performance grade</p>
+                  </div>
                 </div>
-                <p className="text-xs text-gray-400 mt-2">Best parameters: <span className="text-white font-mono">{fmtParams(report.recommended.best_params?.params)}</span></p>
+
+                {/* Key metrics row */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4">
+                  {[
+                    { label: 'Win Rate',   value: `${r.win_rate}%`,    color: r.win_rate >= 50 ? 'text-green-400' : 'text-yellow-400' },
+                    { label: 'Net PnL',    value: `${r.total_pnl >= 0 ? '+' : ''}${r.total_pnl}%`, color: r.total_pnl >= 0 ? 'text-green-400' : 'text-red-400' },
+                    { label: 'Avg / Trade',value: `${r.avg_pnl}%`,    color: r.avg_pnl >= 0 ? 'text-green-300' : 'text-red-400' },
+                    { label: 'Score',      value: String(r.score),     color: 'text-brand' },
+                  ].map(m => (
+                    <div key={m.label} className="bg-surface/60 rounded-lg px-3 py-2.5 text-center">
+                      <p className={`text-lg font-bold font-mono ${m.color}`}>{m.value}</p>
+                      <p className="text-xs text-gray-500 mt-0.5">{m.label}</p>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Trade breakdown */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-3">
+                  {[
+                    { label: 'Trades',     value: `${r.wins}W / ${r.losses}L`, sub: `${r.trades} total` },
+                    { label: 'TP2 hit rate',value: `${r.tp2_rate}%`,           sub: `${r.tp2} premium exits` },
+                    { label: 'Best trade', value: `+${r.best_trade}%`,         sub: 'single best' },
+                    { label: 'Worst trade',value: `${r.worst_trade}%`,         sub: `${r.expired} expired` },
+                  ].map(m => (
+                    <div key={m.label} className="bg-surface/40 border border-surface-border/50 rounded-lg px-3 py-2.5">
+                      <p className="text-xs text-gray-500">{m.label}</p>
+                      <p className="text-sm font-semibold text-gray-200 mt-0.5">{m.value}</p>
+                      <p className="text-xs text-gray-600">{m.sub}</p>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Win rate bar */}
+                <div className="mt-3">
+                  <div className="flex justify-between text-xs text-gray-500 mb-1">
+                    <span>Win rate progress</span>
+                    <span>{r.win_rate}%</span>
+                  </div>
+                  <div className="h-1.5 bg-surface rounded-full overflow-hidden">
+                    <div className="h-full bg-green-500 rounded-full transition-all" style={{ width: `${Math.min(r.win_rate, 100)}%` }} />
+                  </div>
+                </div>
+
+                {pnlEdge && (
+                  <p className="text-xs text-gray-500 mt-3">
+                    {Number(pnlEdge) >= 0
+                      ? <><span className="text-green-400 font-semibold">+{pnlEdge}% PnL edge</span> over #{2} {second?.name}</>
+                      : <><span className="text-yellow-400 font-semibold">{pnlEdge}% PnL</span> vs #{2} {second?.name} — consider alternatives</>
+                    }
+                  </p>
+                )}
               </div>
-            )}
+            )})()}
 
             {/* Ranking table */}
             <div className="bg-surface-card border border-surface-border rounded-lg overflow-hidden">
