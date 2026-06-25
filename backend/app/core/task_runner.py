@@ -94,7 +94,7 @@ async def run_backtest_pipeline(job_id: str, req: BacktestRequest):
                     direction, meta = signal
 
                     if req.use_trend_filter:
-                        trend = trend_direction(window_candles, req.trend_ema_period)
+                        trend = trend_direction(candles[:i + 1], req.trend_ema_period)
                         if trend is not None:
                             if (direction == "long" and trend != "bull") or \
                                (direction == "short" and trend != "bear"):
@@ -168,7 +168,7 @@ async def run_backtest_pipeline(job_id: str, req: BacktestRequest):
                         direction, meta = signal
 
                         if req.use_trend_filter:
-                            trend = trend_direction(window_candles, req.trend_ema_period)
+                            trend = trend_direction(candles[:i + 1], req.trend_ema_period)
                             if trend is not None:
                                 if (direction == "long" and trend != "bull") or \
                                    (direction == "short" and trend != "bear"):
