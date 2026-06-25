@@ -3,14 +3,14 @@ import { useState } from 'react'
 import TabBar from '@/components/layout/TabBar'
 import PositionsTable from '@/components/trade/PositionsTable'
 import { usePaperTrade } from '@/hooks/usePaperTrade'
-import { COINS, STRATEGIES, INTERVALS } from '@/lib/constants'
+import { COINS, STRATEGIES, INTERVALS, COIN_BEST_SETTINGS } from '@/lib/constants'
 
 export default function PaperTradePage() {
   const { start, stop, session, error } = usePaperTrade()
 
-  const [coin,       setCoin]       = useState('BNBUSDT')
-  const [strategies, setStrategies] = useState<string[]>(['rsi_macd', 'ema_crossover', 'bollinger_squeeze'])
-  const [interval,   setInterval]   = useState('15m')
+  const [coin,       setCoin]       = useState('BTCUSDT')
+  const [strategies, setStrategies] = useState<string[]>(['support_resistance','bollinger_squeeze','fibonacci'])
+  const [interval,   setInterval]   = useState('1h')
   const [tpPct,      setTpPct]      = useState(2.0)
   const [tp2Pct,     setTp2Pct]     = useState(4.0)
   const [slPct,      setSlPct]      = useState(1.5)
@@ -25,28 +25,31 @@ export default function PaperTradePage() {
   const initBal   = session?.initial_balance ?? virtualBal
   const balChange = ((balance - initBal) / initBal * 100)
 
+  const handleCoinChange = (c: string) => {
+    setCoin(c)
+    const best = COIN_BEST_SETTINGS[c]
+    if (best) {
+      setStrategies(best.strategies)
+      setMinConf(best.confluence)
+    }
+  }
+
   const toggleStrategy = (id: string) =>
     setStrategies(prev => prev.includes(id) ? prev.filter(s => s !== id) : [...prev, id])
 
   const handleStart = () => {
     const strats = strategies.length > 0 ? strategies : ['rsi_macd']
     start({
-      coin,
-      strategy_primary: strats[0],
-      strategies: strats,
-      interval,
-      tp_pct: tpPct,
-      tp2_pct: tp2Pct,
-      sl_pct: slPct,
-      trade_usdt: tradeUsdt,
-      virtual_balance: virtualBal,
+      coin, strategy_primary: strats[0], strategies: strats,
+      interval, tp_pct: tpPct, tp2_pct: tp2Pct, sl_pct: slPct,
+      trade_usdt: tradeUsdt, virtual_balance: virtualBal,
       ai_min_confidence: 60,
-      use_trend_filter: useTrend,
-      trend_ema_period: 200,
-      use_session_filter: useSession,
-      min_confluence: minConf,
+      use_trend_filter: useTrend, trend_ema_period: 200,
+      use_session_filter: useSession, min_confluence: minConf,
     })
   }
+
+  const best = COIN_BEST_SETTINGS[coin]
 
   return (
     <div className="min-h-screen bg-surface">
@@ -55,7 +58,7 @@ export default function PaperTradePage() {
         <div className="flex items-center justify-between mb-6">
           <div>
             <h1 className="text-xl font-bold text-white">Paper Trade</h1>
-            <p className="text-xs text-gray-500 mt-0.5">Simulate real-time trading with virtual balance — smart filters active</p>
+            <p className="text-xs text-gray-500 mt-0.5">Virtual trading — best strategy per coin auto-loaded from backtest</p>
           </div>
           {session && (
             <div className="flex items-center gap-4 text-sm">
@@ -83,10 +86,15 @@ export default function PaperTradePage() {
 
               <div>
                 <label className="block text-xs text-gray-500 mb-1">Coin</label>
-                <select value={coin} onChange={e => setCoin(e.target.value)}
+                <select value={coin} onChange={e => handleCoinChange(e.target.value)}
                   className="w-full bg-surface border border-surface-border rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-brand">
                   {COINS.map(c => <option key={c} value={c}>{c}</option>)}
                 </select>
+                {best && (
+                  <p className="text-xs text-green-400 mt-1">
+                    Best: {best.win_rate}% WR | +{best.total_pnl}% PnL | {best.trades} trades (backtest)
+                  </p>
+                )}
               </div>
 
               <div>
@@ -218,13 +226,20 @@ export default function PaperTradePage() {
                 currentPrice={session.current_price}
               />
             ) : (
-              <div className="bg-surface-card border border-surface-border rounded-lg p-12 text-center">
-                <p className="text-4xl mb-4">Robot</p>
-                <p className="text-gray-400">Configure and start a paper trading session</p>
-                <p className="text-xs text-gray-600 mt-2">EMA200 trend + session filter + confluence voting active</p>
-                <div className="mt-6 text-xs text-gray-600 space-y-1">
-                  <p>Recommended: BNB or XRP, 15m, confluence 2+</p>
-                  <p>Best backtest: BNB 68.8% win rate | XRP 52.6% win rate</p>
+              <div className="bg-surface-card border border-surface-border rounded-lg p-8">
+                <p className="text-gray-400 text-center mb-4">Configure and start a paper trading session</p>
+                <div className="grid grid-cols-3 gap-2 mt-4">
+                  {Object.entries(COIN_BEST_SETTINGS)
+                    .sort((a,b) => b[1].win_rate - a[1].win_rate)
+                    .slice(0, 9)
+                    .map(([c, s]) => (
+                      <div key={c} onClick={() => handleCoinChange(c)}
+                        className={`cursor-pointer rounded-lg p-3 border transition-all ${coin === c ? 'border-brand bg-brand/10' : 'border-surface-border hover:border-gray-500'}`}>
+                        <p className="text-xs font-bold text-white">{c.replace('USDT','')}</p>
+                        <p className="text-xs text-green-400">{s.win_rate}% WR</p>
+                        <p className="text-xs text-gray-500">+{s.total_pnl}% PnL</p>
+                      </div>
+                    ))}
                 </div>
               </div>
             )}
