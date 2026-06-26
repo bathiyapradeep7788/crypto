@@ -3,13 +3,14 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 
 const TABS = [
-  { href: '/backtest',     label: 'Backtest Bot'      },
-  { href: '/paper-trade',  label: 'Paper Trade'        },
-  { href: '/live-trade',   label: 'Live Actual Trade'  },
-  { href: '/database',     label: 'Database'           },
-  { href: '/reports',      label: 'Reports'            },
-  { href: '/vercel-logs',  label: 'Vercel Logs'        },
-  { href: '/logs',         label: 'System Logs'        },
+  { href: '/backtest',     label: 'Backtest Bot'        },
+  { href: '/portfolio',    label: '⚡ Portfolio Trade'  },
+  { href: '/paper-trade',  label: 'Paper Trade'          },
+  { href: '/live-trade',   label: 'Live Actual Trade'    },
+  { href: '/database',     label: 'Database'             },
+  { href: '/reports',      label: 'Reports'              },
+  { href: '/vercel-logs',  label: 'Vercel Logs'          },
+  { href: '/logs',         label: 'System Logs'          },
 ]
 
 export default function TabBar() {
