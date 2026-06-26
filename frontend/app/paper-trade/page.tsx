@@ -1,327 +1,448 @@
-﻿'use client'
-import { useState, useMemo } from 'react'
+'use client'
+import { useState, useEffect, useRef } from 'react'
 import TabBar from '@/components/layout/TabBar'
-import PositionsTable from '@/components/trade/PositionsTable'
 import { usePaperTrade } from '@/hooks/usePaperTrade'
-import { COINS, STRATEGIES, INTERVALS, COIN_BEST_SETTINGS } from '@/lib/constants'
+import { useLogStream } from '@/hooks/useLogStream'
+import { COIN_BEST_SETTINGS } from '@/lib/constants'
 
-// Compound growth projector based on OP/Ichimoku stats (49.18% WR, avg_win 2.21%, avg_loss 1.5%)
-// User can adjust for their coin's stats
-const COIN_STATS: Record<string, { wr: number; avgWin: number; avgLoss: number; tradesPerYear: number }> = {
-  OPUSDT:   { wr: 0.4918, avgWin: 2.21, avgLoss: 1.50, tradesPerYear: 1708 },
-  ETHUSDT:  { wr: 0.4990, avgWin: 2.18, avgLoss: 1.50, tradesPerYear: 499  },
-  AVAXUSDT: { wr: 0.5244, avgWin: 2.33, avgLoss: 1.50, tradesPerYear: 246  },
-  ARBUSDT:  { wr: 0.4921, avgWin: 2.42, avgLoss: 1.50, tradesPerYear: 252  },
-  UNIUSDT:  { wr: 0.5082, avgWin: 2.21, avgLoss: 1.50, tradesPerYear: 429  },
-  BTCUSDT:  { wr: 0.5849, avgWin: 2.13, avgLoss: 1.50, tradesPerYear: 106  },
-  SOLUSDT:  { wr: 0.5116, avgWin: 2.25, avgLoss: 1.50, tradesPerYear: 172  },
-}
+const TOP_COINS = [
+  { coin: 'NEARUSDT', label: 'NEAR', wr: 48.75, pnl: 405.5, color: '#1D9E75' },
+  { coin: 'OPUSDT',   label: 'OP',   wr: 49.19, pnl: 387.5, color: '#378ADD' },
+  { coin: 'TIAUSDT',  label: 'TIA',  wr: 45.03, pnl: 258.5, color: '#BA7517' },
+  { coin: 'SOLUSDT',  label: 'SOL',  wr: 43.13, pnl: 146.5, color: '#7F77DD' },
+  { coin: 'INJUSDT',  label: 'INJ',  wr: 43.54, pnl: 134.0, color: '#D4537E' },
+  { coin: 'LINKUSDT', label: 'LINK', wr: 43.61, pnl: 137.5, color: '#888780' },
+]
 
-function calcCompoundGrowth(posPct: number, coin: string): number {
-  const s = COIN_STATS[coin] || COIN_STATS['OPUSDT']
-  const f = posPct / 100
-  const g = Math.pow(1 + f * s.avgWin / 100, s.wr) * Math.pow(1 - f * s.avgLoss / 100, 1 - s.wr)
-  return Math.round(100000 * Math.pow(g, s.tradesPerYear))
-}
+const VIRTUAL_BALANCE = 5000
+const TRADE_USDT = 100
 
 export default function PaperTradePage() {
   const { start, stop, session, error } = usePaperTrade()
-
-  const [coin,        setCoin]        = useState('OPUSDT')
-  const [strategies,  setStrategies]  = useState<string[]>(['ichimoku','volume_momentum','support_resistance'])
-  const [interval,    setInterval]    = useState('1h')
-  const [tpPct,       setTpPct]       = useState(2.0)
-  const [tp2Pct,      setTp2Pct]      = useState(4.0)
-  const [slPct,       setSlPct]       = useState(1.5)
-  const [tradeUsdt,   setTradeUsdt]   = useState(100)
-  const [virtualBal,  setVirtualBal]  = useState(10000)
-  const [minConf,     setMinConf]     = useState(2)
-  const [useTrend,    setUseTrend]    = useState(true)
-  const [useSession,  setUseSession]  = useState(true)
-  const [compoundMode,setCompoundMode]= useState(false)
-  const [posPct,      setPosPct]      = useState(20)
+  const { logs } = useLogStream()
+  const [selectedCoin, setSelectedCoin] = useState<string | null>(null)
+  const [isStarting, setIsStarting] = useState(false)
+  const prevTradesLen = useRef(0)
+  const [flashTrade, setFlashTrade] = useState(false)
 
   const isRunning = session?.status === 'running'
-  const balance   = (session as any)?.balance ?? virtualBal
-  const initBal   = (session as any)?.initial_balance ?? virtualBal
-  const balChange = ((balance - initBal) / initBal * 100)
+  const balance   = (session as any)?.balance ?? VIRTUAL_BALANCE
+  const initBal   = (session as any)?.initial_balance ?? VIRTUAL_BALANCE
+  const profit    = balance - initBal
   const wins      = (session as any)?.wins  ?? 0
   const losses    = (session as any)?.losses ?? 0
+  const closedTrades: any[] = (session as any)?.closed_trades ?? []
+  const openPos: any        = (session as any)?.open_position ?? null
+  const currentPrice        = (session as any)?.current_price ?? null
+  const totalPnlPct         = closedTrades.reduce((s: number, t: any) => s + (t.profit_pct ?? 0), 0)
+  const unrealizedPnl       = openPos && currentPrice
+    ? ((currentPrice - openPos.entry) / openPos.entry * 100 * (openPos.direction === 'long' ? 1 : -1))
+    : null
 
-  const projected = useMemo(() => calcCompoundGrowth(posPct, coin), [posPct, coin])
-  const projectedX = (projected / 100000).toFixed(1)
+  useEffect(() => {
+    if (closedTrades.length > prevTradesLen.current && prevTradesLen.current > 0) {
+      setFlashTrade(true)
+      setTimeout(() => setFlashTrade(false), 2500)
+    }
+    prevTradesLen.current = closedTrades.length
+  }, [closedTrades.length])
 
-  const handleCoinChange = (c: string) => {
-    setCoin(c)
-    const best = COIN_BEST_SETTINGS[c]
-    if (best) { setStrategies(best.strategies); setMinConf(best.confluence) }
-  }
-
-  const toggleStrategy = (id: string) =>
-    setStrategies(prev => prev.includes(id) ? prev.filter(s => s !== id) : [...prev, id])
-
-  const handleStart = () => {
-    const strats = strategies.length > 0 ? strategies : ['rsi_macd']
-    start({
-      coin, strategy_primary: strats[0], strategies: strats,
-      interval, tp_pct: tpPct, tp2_pct: tp2Pct, sl_pct: slPct,
-      trade_usdt: tradeUsdt, virtual_balance: virtualBal,
+  const handleStart = async (coin: string) => {
+    setSelectedCoin(coin)
+    setIsStarting(true)
+    const best = COIN_BEST_SETTINGS[coin]
+    await start({
+      coin,
+      strategy_primary: best?.strategies[0] ?? 'ichimoku',
+      strategies: best?.strategies ?? ['ichimoku', 'volume_momentum'],
+      interval: '1h',
+      tp_pct: 2.0, tp2_pct: 4.0, sl_pct: 1.5,
+      trade_usdt: TRADE_USDT,
+      virtual_balance: VIRTUAL_BALANCE,
       ai_min_confidence: 60,
-      use_trend_filter: useTrend, trend_ema_period: 200,
-      use_session_filter: useSession, min_confluence: minConf,
-      position_pct: compoundMode ? posPct / 100 : 0,
+      use_trend_filter: true,
+      trend_ema_period: 200,
+      use_session_filter: true,
+      min_confluence: best?.confluence ?? 1,
+      position_pct: 0,
     })
+    setIsStarting(false)
   }
-
-  const best = COIN_BEST_SETTINGS[coin]
 
   return (
     <div className="min-h-screen bg-surface">
       <TabBar />
-      <main className="max-w-screen-2xl mx-auto px-6 py-6">
-        <div className="flex items-center justify-between mb-6">
+      <main className="max-w-screen-xl mx-auto px-4 py-5">
+
+        {/* Header */}
+        <div className="flex items-center justify-between mb-5">
           <div>
-            <h1 className="text-xl font-bold text-white">Paper Trade</h1>
-            <p className="text-xs text-gray-500 mt-0.5">Virtual trading — best strategy per coin, compound mode available</p>
+            <h1 className="text-lg font-bold text-white">
+              Paper Trade
+              <span className="ml-2 text-xs font-normal text-gray-500">
+                Demo Binance · Virtual ${VIRTUAL_BALANCE.toLocaleString()} · $100/trade
+              </span>
+            </h1>
+            <p className="text-xs text-gray-600 mt-0.5">
+              Real Binance price signals · Optimized 2025 strategies · EMA200 + Session filter ON
+            </p>
           </div>
           {session && (
-            <div className="flex items-center gap-4 text-sm">
+            <div className="flex items-center gap-5">
               <div className="text-right">
                 <p className="text-xs text-gray-500">Balance</p>
-                <p className="text-white font-bold">${balance.toFixed(2)}</p>
-                <p className={`text-xs ${balChange >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                  {balChange >= 0 ? '+' : ''}{balChange.toFixed(2)}% | {wins}W/{losses}L
+                <p className="text-white font-bold text-lg">${balance.toFixed(2)}</p>
+                <p className={`text-xs font-semibold ${profit >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                  {profit >= 0 ? '+' : ''}${profit.toFixed(2)} &nbsp;·&nbsp; {wins}W / {losses}L
                 </p>
               </div>
-              {isRunning && (
-                <div className="flex items-center gap-2 text-brand">
-                  <span className="w-2 h-2 bg-brand rounded-full animate-pulse" />
-                  Live
+              {isRunning ? (
+                <div className="flex flex-col items-center gap-1.5">
+                  <div className="flex items-center gap-2 text-green-400 text-sm font-semibold">
+                    <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />LIVE
+                  </div>
+                  <button onClick={stop}
+                    className="text-xs px-3 py-1 bg-red-600 hover:bg-red-700 text-white rounded transition-colors">
+                    Stop
+                  </button>
                 </div>
+              ) : (
+                <span className="text-xs text-gray-500 border border-surface-border rounded px-2 py-1">Stopped</span>
               )}
             </div>
           )}
         </div>
 
-        <div className="grid grid-cols-12 gap-4">
-          <div className="col-span-4 space-y-4">
+        {/* COIN QUICK-SELECT — before session */}
+        {!session && (
+          <div className="mb-6">
+            <p className="text-xs text-gray-500 uppercase tracking-wider mb-3">
+              Select coin to start — strategies auto-loaded from 2025 backtest
+            </p>
+            <div className="grid grid-cols-6 gap-3">
+              {TOP_COINS.map(tc => {
+                const best = COIN_BEST_SETTINGS[tc.coin]
+                return (
+                  <button key={tc.coin}
+                    onClick={() => handleStart(tc.coin)}
+                    disabled={isStarting}
+                    style={{ borderColor: tc.color + '55' }}
+                    className="bg-surface-card border rounded-xl p-4 text-left hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-50 cursor-pointer">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-base font-bold text-white">{tc.label}</span>
+                      <span className="text-[10px] px-1.5 py-0.5 rounded font-semibold"
+                        style={{ background: tc.color + '22', color: tc.color }}>
+                        {tc.wr}%
+                      </span>
+                    </div>
+                    <div className="text-lg font-bold" style={{ color: tc.color }}>+{tc.pnl}%</div>
+                    <div className="text-[10px] text-gray-600 mt-0.5">2025 PnL (6mo)</div>
+                    {best && (
+                      <div className="text-[10px] text-gray-700 mt-2 leading-relaxed">
+                        {best.strategies.slice(0, 2).join(' + ')}
+                        {best.strategies.length > 2 && <span className="text-gray-800"> +{best.strategies.length - 2}</span>}
+                      </div>
+                    )}
+                    {isStarting && selectedCoin === tc.coin && (
+                      <div className="text-[10px] text-green-400 mt-1.5 animate-pulse font-semibold">Starting...</div>
+                    )}
+                  </button>
+                )
+              })}
+            </div>
+            <p className="text-xs text-gray-700 mt-3">
+              Virtual balance ${VIRTUAL_BALANCE.toLocaleString()} · Fixed $100 per trade · 1h candles
+            </p>
+          </div>
+        )}
 
-            {/* Compound Growth Projector */}
-            <div className="bg-gradient-to-br from-brand/10 to-surface-card border border-brand/30 rounded-lg p-4">
-              <div className="flex items-center justify-between mb-3">
-                <div>
-                  <p className="text-xs text-gray-400 uppercase tracking-wider">Compound Projector</p>
-                  <p className="text-xs text-gray-600">Based on 2024 backtest stats</p>
-                </div>
-                <div onClick={() => setCompoundMode(!compoundMode)}
-                  className={`w-10 h-5 rounded-full transition-colors relative cursor-pointer ${compoundMode ? 'bg-brand' : 'bg-gray-700'}`}>
-                  <div className={`w-4 h-4 bg-white rounded-full absolute top-0.5 transition-transform ${compoundMode ? 'translate-x-5' : 'translate-x-0.5'}`} />
-                </div>
-              </div>
+        {/* ACTIVE SESSION */}
+        {session && (
+          <div className="grid grid-cols-12 gap-4">
 
-              <div className="mb-3">
-                <div className="flex justify-between text-xs mb-1">
-                  <span className="text-gray-400">Position Size: <span className="text-white font-bold">{posPct}%</span> per trade</span>
-                  <span className={`font-bold ${projected >= 700000 ? 'text-green-400' : projected >= 300000 ? 'text-brand' : 'text-gray-400'}`}>
-                    {projectedX}x
+            {/* Sidebar */}
+            <div className="col-span-3 space-y-3">
+
+              {/* Session card */}
+              <div className="bg-surface-card border border-surface-border rounded-lg p-3 text-xs space-y-2">
+                <div className="flex justify-between items-start">
+                  <span className="text-gray-500">Coin</span>
+                  <span className="text-white font-bold">{session.coin}</span>
+                </div>
+                <div className="flex justify-between items-start">
+                  <span className="text-gray-500">Strategy</span>
+                  <span className="text-brand text-[10px] text-right max-w-[130px] leading-tight">
+                    {(COIN_BEST_SETTINGS[session.coin]?.strategies ?? []).join(' + ') || session.strategy}
                   </span>
                 </div>
-                <input type="range" min="5" max="45" step="5" value={posPct}
-                  onChange={e => setPosPct(parseInt(e.target.value))}
-                  className="w-full accent-brand" />
-                <div className="flex justify-between text-xs text-gray-600 mt-0.5">
-                  <span>5% safe</span><span>25% med</span><span>45% high</span>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Confluence</span>
+                  <span className="text-white">{COIN_BEST_SETTINGS[session.coin]?.confluence ?? 1}-of-{COIN_BEST_SETTINGS[session.coin]?.strategies?.length ?? 1}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Interval</span>
+                  <span className="text-white">1h</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Per trade</span>
+                  <span className="text-white">$100 fixed</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">TP1 / TP2 / SL</span>
+                  <span className="text-white">2% / 4% / 1.5%</span>
+                </div>
+                <hr className="border-surface-border" />
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Total PnL</span>
+                  <span className={`font-semibold ${totalPnlPct >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                    {totalPnlPct >= 0 ? '+' : ''}{totalPnlPct.toFixed(2)}%
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Last price</span>
+                  <span className="text-white font-mono">{currentPrice?.toFixed(4) ?? '—'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Updated</span>
+                  <span className="text-gray-500">{session.last_check ? new Date(session.last_check).toLocaleTimeString() : '—'}</span>
                 </div>
               </div>
 
-              <div className="bg-surface/60 rounded-lg p-3 text-center">
-                <p className="text-xs text-gray-500">$100k projected (1 year)</p>
-                <p className={`text-2xl font-black mt-1 ${projected >= 700000 ? 'text-green-400' : projected >= 300000 ? 'text-brand' : 'text-gray-300'}`}>
-                  ${projected >= 1000000
-                    ? (projected/1000000).toFixed(2) + 'M'
-                    : (projected/1000).toFixed(0) + 'k'}
-                </p>
-                {projected >= 700000 && (
-                  <p className="text-xs text-green-400 mt-1">Target $700k reached!</p>
-                )}
-                <div className="grid grid-cols-3 gap-1 mt-2 text-xs text-gray-600">
-                  <div>20%={calcCompoundGrowth(20,coin)/1000|0}k</div>
-                  <div>30%={calcCompoundGrowth(30,coin)/1000|0}k</div>
-                  <div>35%={calcCompoundGrowth(35,coin)/1000|0}k</div>
-                </div>
-              </div>
-
-              {compoundMode && (
-                <p className="text-xs text-brand mt-2">
-                  ON: each trade uses {posPct}% of current balance — profits reinvest automatically
-                </p>
-              )}
-            </div>
-
-            <div className="bg-surface-card border border-surface-border rounded-lg p-4 space-y-3">
-              <h3 className="text-sm font-semibold text-gray-300">Configuration</h3>
-
+              {/* Switch coin */}
               <div>
-                <label className="block text-xs text-gray-500 mb-1">Coin</label>
-                <select value={coin} onChange={e => handleCoinChange(e.target.value)}
-                  className="w-full bg-surface border border-surface-border rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-brand">
-                  {COINS.map(c => <option key={c} value={c}>{c}</option>)}
-                </select>
-                {best && (
-                  <p className="text-xs text-green-400 mt-1">{best.win_rate}% WR | +{best.total_pnl}% PnL (backtest 2024)</p>
-                )}
-              </div>
-
-              <div>
-                <label className="block text-xs text-gray-500 mb-1">Strategies ({strategies.length})</label>
-                <div className="grid grid-cols-2 gap-1 max-h-36 overflow-y-auto">
-                  {STRATEGIES.map(s => (
-                    <div key={s.id} onClick={() => toggleStrategy(s.id)}
-                      className={`flex items-center gap-1.5 cursor-pointer px-2 py-1.5 rounded text-xs border transition-colors ${
-                        strategies.includes(s.id) ? 'border-brand bg-brand/10 text-brand' : 'border-surface-border text-gray-400 hover:border-gray-500'}`}>
-                      <span className={`w-3 h-3 rounded-sm border flex-shrink-0 flex items-center justify-center text-[8px] ${strategies.includes(s.id) ? 'bg-brand border-brand text-black' : 'border-gray-600'}`}>
-                        {strategies.includes(s.id) ? 'v' : ''}
-                      </span>
-                      {s.label}
-                    </div>
+                <p className="text-[10px] text-gray-600 uppercase tracking-wider mb-2">Switch coin</p>
+                <div className="grid grid-cols-3 gap-1">
+                  {TOP_COINS.map(tc => (
+                    <button key={tc.coin}
+                      onClick={async () => { await stop(); setTimeout(() => handleStart(tc.coin), 600) }}
+                      style={session.coin === tc.coin ? { borderColor: tc.color, color: tc.color } : {}}
+                      className={`text-[11px] py-1.5 rounded-lg border transition-colors
+                        ${session.coin === tc.coin ? 'font-bold' : 'border-surface-border text-gray-500 hover:border-gray-500'}`}>
+                      {tc.label}
+                    </button>
                   ))}
                 </div>
               </div>
 
-              <div>
-                <label className="block text-xs text-gray-500 mb-1">Interval</label>
-                <select value={interval} onChange={e => setInterval(e.target.value)}
-                  className="w-full bg-surface border border-surface-border rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-brand">
-                  {INTERVALS.map(i => <option key={i.value} value={i.value}>{i.label}</option>)}
-                </select>
+              {/* Live log */}
+              <div className="bg-surface-card border border-surface-border rounded-lg p-2.5">
+                <p className="text-[10px] text-gray-600 uppercase tracking-wider mb-1.5">Live log</p>
+                <div className="space-y-0.5 max-h-52 overflow-y-auto font-mono">
+                  {logs.slice(0, 25).map((log, i) => (
+                    <p key={i} className={`text-[10px] leading-relaxed ${
+                      log.level === 'ERROR' ? 'text-red-400' :
+                      log.level === 'WARN'  ? 'text-yellow-400' : 'text-gray-600'
+                    }`}>
+                      <span className="text-gray-700">{log.ts?.slice(11,19)} </span>
+                      {log.message}
+                    </p>
+                  ))}
+                  {logs.length === 0 && (
+                    <p className="text-[10px] text-gray-700">Waiting for signals...</p>
+                  )}
+                </div>
               </div>
+            </div>
 
-              <div className="grid grid-cols-3 gap-2">
-                {[{label:'TP1 %',val:tpPct,set:setTpPct},{label:'TP2 %',val:tp2Pct,set:setTp2Pct},{label:'SL %',val:slPct,set:setSlPct}].map(f => (
-                  <div key={f.label}>
-                    <label className="block text-xs text-gray-500 mb-1">{f.label}</label>
-                    <input type="number" step="0.1" value={f.val} onChange={e => f.set(parseFloat(e.target.value))}
-                      className="w-full bg-surface border border-surface-border rounded px-2 py-1.5 text-sm text-white focus:outline-none focus:border-brand" />
+            {/* Main panel */}
+            <div className="col-span-9 space-y-4">
+
+              {/* Stats */}
+              <div className="grid grid-cols-5 gap-3">
+                {[
+                  { label: 'Balance',    value: `$${balance.toFixed(2)}`,                      color: 'text-white' },
+                  { label: 'Net Profit', value: `${profit >= 0 ? '+' : ''}$${profit.toFixed(2)}`, color: profit >= 0 ? 'text-green-400' : 'text-red-400' },
+                  { label: 'Win Rate',   value: (wins+losses)>0 ? `${(wins/(wins+losses)*100).toFixed(1)}%` : '—', color: 'text-brand' },
+                  { label: 'W / L',      value: `${wins} / ${losses}`,                         color: 'text-gray-300' },
+                  { label: 'Total PnL',  value: `${totalPnlPct >= 0 ? '+' : ''}${totalPnlPct.toFixed(2)}%`, color: totalPnlPct >= 0 ? 'text-green-400' : 'text-red-400' },
+                ].map(s => (
+                  <div key={s.label} className="bg-surface-card border border-surface-border rounded-lg p-3 text-center">
+                    <p className="text-[10px] text-gray-500 mb-1">{s.label}</p>
+                    <p className={`text-base font-bold ${s.color}`}>{s.value}</p>
                   </div>
                 ))}
               </div>
 
-              {!compoundMode ? (
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="block text-xs text-gray-500 mb-1">Trade Size (USDT)</label>
-                    <input type="number" value={tradeUsdt} onChange={e => setTradeUsdt(parseInt(e.target.value))}
-                      className="w-full bg-surface border border-surface-border rounded px-2 py-1.5 text-sm text-white focus:outline-none focus:border-brand" />
+              {/* OPEN POSITION */}
+              {openPos ? (
+                <div className={`rounded-xl p-4 border-2 ${
+                  openPos.direction === 'long' ? 'bg-green-900/10 border-green-500/40' : 'bg-red-900/10 border-red-500/40'
+                }`}>
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-3">
+                      <span className={`text-sm font-bold px-3 py-1 rounded-full ${
+                        openPos.direction === 'long' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'
+                      }`}>
+                        {openPos.direction === 'long' ? '▲ LONG' : '▼ SHORT'}
+                      </span>
+                      <span className="text-white font-bold text-lg">{openPos.symbol}</span>
+                      <span className="text-xs text-gray-500 bg-surface-card px-2 py-0.5 rounded">
+                        ${openPos.trade_usdt} position
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="w-2.5 h-2.5 bg-green-400 rounded-full animate-pulse" />
+                      <span className="text-sm text-green-400 font-bold">OPEN</span>
+                    </div>
                   </div>
-                  <div>
-                    <label className="block text-xs text-gray-500 mb-1">Virtual Balance</label>
-                    <input type="number" value={virtualBal} onChange={e => setVirtualBal(parseInt(e.target.value))}
-                      className="w-full bg-surface border border-surface-border rounded px-2 py-1.5 text-sm text-white focus:outline-none focus:border-brand" />
+
+                  <div className="grid grid-cols-7 gap-4 text-xs">
+                    <div>
+                      <p className="text-gray-500 mb-1">Entry price</p>
+                      <p className="text-white font-mono font-semibold text-sm">{openPos.entry}</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-500 mb-1">Current</p>
+                      <p className="text-white font-mono font-semibold text-sm">{currentPrice?.toFixed(4) ?? '—'}</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-500 mb-1">Unrealized</p>
+                      <p className={`font-mono font-bold text-base ${
+                        unrealizedPnl !== null && unrealizedPnl >= 0 ? 'text-green-400' : 'text-red-400'
+                      }`}>
+                        {unrealizedPnl !== null ? `${unrealizedPnl >= 0 ? '+' : ''}${unrealizedPnl.toFixed(2)}%` : '—'}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-green-600 mb-1">Take Profit 1</p>
+                      <p className="text-green-400 font-mono">{openPos.tp}</p>
+                    </div>
+                    <div>
+                      <p className="text-green-500 mb-1">Take Profit 2</p>
+                      <p className="text-green-300 font-mono">{openPos.tp2}</p>
+                    </div>
+                    <div>
+                      <p className="text-red-600 mb-1">Stop Loss</p>
+                      <p className="text-red-400 font-mono">{openPos.sl}</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-500 mb-1">Opened</p>
+                      <p className="text-gray-400">{new Date(openPos.opened_at).toLocaleTimeString()}</p>
+                    </div>
                   </div>
+
+                  {/* Progress bar — price between SL and TP */}
+                  {currentPrice && openPos && (() => {
+                    const range  = openPos.tp2 - openPos.sl
+                    const pos    = currentPrice - openPos.sl
+                    const pct    = Math.max(0, Math.min(100, (pos / range) * 100))
+                    return (
+                      <div className="mt-3">
+                        <div className="flex justify-between text-[10px] text-gray-600 mb-1">
+                          <span>SL {openPos.sl}</span>
+                          <span>TP1 {openPos.tp}</span>
+                          <span>TP2 {openPos.tp2}</span>
+                        </div>
+                        <div className="h-1.5 bg-red-900/40 rounded-full overflow-hidden">
+                          <div className="h-full bg-gradient-to-r from-red-500 via-yellow-400 to-green-400 rounded-full transition-all"
+                            style={{ width: `${pct}%` }} />
+                        </div>
+                      </div>
+                    )
+                  })()}
                 </div>
               ) : (
-                <div>
-                  <label className="block text-xs text-gray-500 mb-1">Starting Virtual Balance</label>
-                  <input type="number" value={virtualBal} onChange={e => setVirtualBal(parseInt(e.target.value))}
-                    className="w-full bg-surface border border-surface-border rounded px-2 py-1.5 text-sm text-white focus:outline-none focus:border-brand" />
-                  <p className="text-xs text-brand mt-1">Each trade = {posPct}% of current balance (auto-compounds)</p>
+                <div className="bg-surface-card border border-dashed border-surface-border rounded-xl p-6 text-center">
+                  <p className="text-gray-500 text-sm">No open position</p>
+                  <p className="text-gray-700 text-xs mt-1">
+                    Scanning every 1h · waiting for {COIN_BEST_SETTINGS[session.coin]?.confluence ?? 1}-of-
+                    {COIN_BEST_SETTINGS[session.coin]?.strategies?.length ?? 1} strategy confluence
+                  </p>
                 </div>
               )}
+
+              {/* TRADE HISTORY */}
+              <div className={`bg-surface-card border rounded-xl overflow-hidden transition-all duration-500 ${
+                flashTrade ? 'border-green-500/50' : 'border-surface-border'
+              }`}>
+                <div className="px-4 py-2.5 border-b border-surface-border flex items-center justify-between">
+                  <h3 className="text-sm font-semibold text-white">
+                    Closed Trades
+                    {closedTrades.length > 0 && (
+                      <span className="ml-2 text-xs text-gray-500 font-normal">({closedTrades.length} total)</span>
+                    )}
+                  </h3>
+                  {flashTrade && (
+                    <span className="text-xs text-green-400 font-bold animate-pulse">Trade closed!</span>
+                  )}
+                </div>
+
+                {closedTrades.length === 0 ? (
+                  <div className="p-8 text-center">
+                    <p className="text-gray-600 text-sm">No completed trades yet</p>
+                    <p className="text-gray-700 text-xs mt-1">First signal could take up to 1h (session filter active)</p>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto max-h-72 overflow-y-auto">
+                    <table className="w-full text-xs">
+                      <thead className="sticky top-0 bg-surface-card border-b border-surface-border">
+                        <tr className="text-gray-500 text-left">
+                          <th className="px-3 py-2 w-8">#</th>
+                          <th className="px-3 py-2">Dir</th>
+                          <th className="px-3 py-2">Entry</th>
+                          <th className="px-3 py-2">Exit</th>
+                          <th className="px-3 py-2">Result</th>
+                          <th className="px-3 py-2">PnL %</th>
+                          <th className="px-3 py-2">Profit $</th>
+                          <th className="px-3 py-2">Balance after</th>
+                          <th className="px-3 py-2">Closed</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(() => {
+                          let runBalance = initBal
+                          const rows = [...closedTrades].map((t: any, idx: number) => {
+                            runBalance = runBalance + (t.profit_usdt ?? 0)
+                            return { ...t, balAfter: runBalance, idx }
+                          })
+                          return rows.reverse().map((t: any, i: number) => (
+                            <tr key={i} className={`border-b border-surface-border transition-colors ${
+                              i === 0 && flashTrade ? 'bg-green-900/20' : 'hover:bg-surface-hover'
+                            }`}>
+                              <td className="px-3 py-2 text-gray-600">{closedTrades.length - t.idx}</td>
+                              <td className="px-3 py-2">
+                                <span className={`font-bold text-[11px] ${t.direction === 'long' ? 'text-green-400' : 'text-red-400'}`}>
+                                  {t.direction === 'long' ? '▲ L' : '▼ S'}
+                                </span>
+                              </td>
+                              <td className="px-3 py-2 font-mono text-gray-300">{t.entry}</td>
+                              <td className="px-3 py-2 font-mono text-gray-300">{t.exit_price}</td>
+                              <td className="px-3 py-2">
+                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                                  t.exit_reason === 'Hit TP2' ? 'bg-green-900/60 text-green-300' :
+                                  t.exit_reason === 'Hit TP1' ? 'bg-green-900/30 text-green-400' :
+                                  'bg-red-900/50 text-red-400'
+                                }`}>
+                                  {t.exit_reason}
+                                </span>
+                              </td>
+                              <td className={`px-3 py-2 font-mono font-bold ${t.profit_pct >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                {t.profit_pct >= 0 ? '+' : ''}{t.profit_pct}%
+                              </td>
+                              <td className={`px-3 py-2 font-mono font-semibold ${t.profit_usdt >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                {t.profit_usdt >= 0 ? '+' : ''}${t.profit_usdt}
+                              </td>
+                              <td className="px-3 py-2 font-mono text-gray-400">${t.balAfter.toFixed(2)}</td>
+                              <td className="px-3 py-2 text-gray-600 whitespace-nowrap">
+                                {new Date(t.closed_at).toLocaleString()}
+                              </td>
+                            </tr>
+                          ))
+                        })()}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
             </div>
-
-            <div className="bg-surface-card border border-surface-border rounded-lg p-4 space-y-3">
-              <h3 className="text-sm font-semibold text-gray-300">Smart Filters</h3>
-
-              <div className="flex items-center justify-between">
-                <div><p className="text-xs text-gray-300">EMA200 Trend Filter</p><p className="text-xs text-gray-600">Trade with trend only</p></div>
-                <div onClick={() => setUseTrend(!useTrend)}
-                  className={`w-10 h-5 rounded-full transition-colors relative cursor-pointer ${useTrend ? 'bg-brand' : 'bg-gray-700'}`}>
-                  <div className={`w-4 h-4 bg-white rounded-full absolute top-0.5 transition-transform ${useTrend ? 'translate-x-5' : 'translate-x-0.5'}`} />
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between">
-                <div><p className="text-xs text-gray-300">Session Filter (UTC 8-20)</p><p className="text-xs text-gray-600">London + NY overlap</p></div>
-                <div onClick={() => setUseSession(!useSession)}
-                  className={`w-10 h-5 rounded-full transition-colors relative cursor-pointer ${useSession ? 'bg-brand' : 'bg-gray-700'}`}>
-                  <div className={`w-4 h-4 bg-white rounded-full absolute top-0.5 transition-transform ${useSession ? 'translate-x-5' : 'translate-x-0.5'}`} />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs text-gray-500 mb-1">
-                  Confluence: {minConf}/{strategies.length || 1}
-                  <span className="ml-1 text-gray-600">({minConf <= 1 ? 'any signal' : `${minConf} must agree`})</span>
-                </label>
-                <input type="range" min="1" max={Math.max(strategies.length, 2)} value={minConf}
-                  onChange={e => setMinConf(parseInt(e.target.value))} className="w-full accent-brand" />
-              </div>
-            </div>
-
-            {error && <div className="bg-red-900/20 border border-red-800 rounded-lg px-4 py-3 text-sm text-red-400">{error}</div>}
-
-            {!isRunning ? (
-              <button onClick={handleStart} disabled={strategies.length === 0}
-                className="w-full py-3 rounded-lg font-semibold text-sm bg-brand hover:bg-brand-dark text-black transition-all disabled:opacity-40">
-                {compoundMode ? `Start (${posPct}% Compound Mode)` : 'Start Paper Trading'}
-              </button>
-            ) : (
-              <button onClick={stop}
-                className="w-full py-3 rounded-lg font-semibold text-sm bg-red-600 hover:bg-red-700 text-white transition-all">
-                Stop Session
-              </button>
-            )}
-
-            {session && (
-              <div className="bg-surface-card border border-surface-border rounded-lg p-3 text-xs space-y-1">
-                <div className="flex justify-between"><span className="text-gray-500">Session</span><span className="font-mono text-gray-300">{session.session_id}</span></div>
-                <div className="flex justify-between"><span className="text-gray-500">Status</span><span className={session.status === 'running' ? 'text-green-400' : 'text-gray-400'}>{session.status}</span></div>
-                <div className="flex justify-between"><span className="text-gray-500">W/L</span><span className="text-gray-300">{wins}W / {losses}L {wins+losses > 0 ? `(${(wins*100/(wins+losses)).toFixed(1)}%)` : ''}</span></div>
-                <div className="flex justify-between"><span className="text-gray-500">Price</span><span className="font-mono text-white">{session.current_price?.toFixed(4) ?? '-'}</span></div>
-                <div className="flex justify-between"><span className="text-gray-500">Last Check</span><span className="text-gray-400">{session.last_check ? new Date(session.last_check).toLocaleTimeString() : '-'}</span></div>
-              </div>
-            )}
           </div>
+        )}
 
-          <div className="col-span-8">
-            {session ? (
-              <PositionsTable
-                openPosition={session.open_position}
-                closedTrades={session.closed_trades}
-                currentPrice={session.current_price}
-              />
-            ) : (
-              <div className="bg-surface-card border border-surface-border rounded-lg p-8">
-                <p className="text-gray-400 text-center mb-2">Select coin and start trading</p>
-                <p className="text-xs text-gray-600 text-center mb-5">Best strategies auto-loaded from backtest results</p>
-                <div className="grid grid-cols-4 gap-2">
-                  {[
-                    { coin:'OPUSDT',  wr:'49.2%', pnl:'+558%', x:'2.3x@15%', tag:'Most Trades' },
-                    { coin:'BTCUSDT', wr:'58.5%', pnl:'+66%',  x:'1.1x@15%', tag:'Highest WR' },
-                    { coin:'AVAXUSDT',wr:'52.4%', pnl:'+125%', x:'1.2x@15%', tag:'Best R:R' },
-                    { coin:'ETHUSDT', wr:'49.9%', pnl:'+167%', x:'1.3x@15%', tag:'High Volume' },
-                    { coin:'UNIUSDT', wr:'50.8%', pnl:'+166%', x:'1.3x@15%', tag:'Steady' },
-                    { coin:'ARBUSDT', wr:'49.2%', pnl:'+108%', x:'1.2x@15%', tag:'High Avg' },
-                    { coin:'SOLUSDT', wr:'51.2%', pnl:'+72%',  x:'1.1x@15%', tag:'Bull Coin' },
-                    { coin:'DOTUSDT', wr:'51.7%', pnl:'+87%',  x:'1.1x@15%', tag:'Stoch RSI' },
-                  ].map(s => (
-                    <div key={s.coin} onClick={() => handleCoinChange(s.coin)}
-                      className={`cursor-pointer rounded-lg p-3 border transition-all ${coin === s.coin ? 'border-brand bg-brand/10' : 'border-surface-border hover:border-gray-500'}`}>
-                      <p className="text-xs font-bold text-white">{s.coin.replace('USDT','')}</p>
-                      <p className="text-xs text-green-400">{s.wr} WR</p>
-                      <p className="text-xs text-brand">{s.pnl} PnL</p>
-                      <p className="text-xs text-gray-600">{s.x}</p>
-                      <p className="text-xs text-gray-600 mt-1">{s.tag}</p>
-                    </div>
-                  ))}
-                </div>
-                <div className="mt-4 bg-brand/5 border border-brand/20 rounded-lg p-3 text-xs text-gray-400">
-                  <span className="text-brand font-semibold">Compound Mode:</span> Enable the projector above and set position % to 35% — backtest shows $100k can reach $691k in 1 year on OP/Ichimoku
-                </div>
-              </div>
-            )}
+        {error && (
+          <div className="mt-4 bg-red-900/20 border border-red-800 rounded-lg px-4 py-3 text-sm text-red-400">
+            {error}
           </div>
-        </div>
+        )}
       </main>
     </div>
   )
