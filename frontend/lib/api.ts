@@ -119,6 +119,10 @@ export async function getCoinReport(coin: string): Promise<any> {
   return getJSON(`/reports/coin/${coin}`)
 }
 
+export async function getAllCoinsSummary(minTrades = 10): Promise<any> {
+  return getJSON(`/reports/all-coins?min_trades=${minTrades}`)
+}
+
 export function coinReportTextUrl(coin: string): string {
   return `${BASE}/reports/coin/${coin}/text`
 }

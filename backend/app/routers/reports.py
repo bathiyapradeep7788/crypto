@@ -147,6 +147,67 @@ async def report_coins():
     return {"coins": _distinct("distinct_backtest_coins")}
 
 
+@router.get("/all-coins")
+async def all_coins_summary(min_trades: int = 10):
+    """Fetch all backtest results and return per-coin best-strategy ranking."""
+    client = _client()
+    rows: list = []
+    offset, page_size = 0, 1000
+    while True:
+        res = (
+            client.table("backtest_results")
+            .select("coin,strategy,win_loss_rate,profit_rate")
+            .range(offset, offset + page_size - 1)
+            .execute()
+        )
+        batch = res.data or []
+        rows.extend(batch)
+        if len(batch) < page_size:
+            break
+        offset += page_size
+
+    by_coin: dict = defaultdict(lambda: defaultdict(list))
+    for r in rows:
+        coin = r.get("coin") or ""
+        strat = r.get("strategy") or ""
+        if coin:
+            by_coin[coin][strat].append(r)
+
+    result = []
+    for coin, strat_map in by_coin.items():
+        all_coin_trades: list = []
+        best_stat = None
+        best_name = None
+
+        for name, trades in strat_map.items():
+            all_coin_trades.extend(trades)
+            if len(trades) < min_trades:
+                continue
+            stat = _agg(trades)
+            stat["name"] = name
+            score = round(stat["win_rate"] / 100 * stat["total_pnl"], 2)
+            stat["score"] = score
+            if best_stat is None or score > best_stat["score"]:
+                best_stat = stat
+                best_name = name
+
+        overall = _agg(all_coin_trades)
+        result.append({
+            "coin": coin,
+            "total_trades": len(all_coin_trades),
+            "best_strategy": best_name or "—",
+            "best_win_rate": best_stat["win_rate"] if best_stat else overall["win_rate"],
+            "best_total_pnl": best_stat["total_pnl"] if best_stat else overall["total_pnl"],
+            "best_trades": best_stat["trades"] if best_stat else 0,
+            "best_score": best_stat["score"] if best_stat else 0,
+            "overall_win_rate": overall["win_rate"],
+            "overall_total_pnl": overall["total_pnl"],
+        })
+
+    result.sort(key=lambda x: (x["best_win_rate"], x["best_total_pnl"]), reverse=True)
+    return {"coins": result, "total_analyzed": len(rows)}
+
+
 @router.get("/coin/{coin}")
 async def report_coin(coin: str):
     return _analyze(coin)

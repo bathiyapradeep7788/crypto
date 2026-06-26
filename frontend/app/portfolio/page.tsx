@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import TabBar from '@/components/layout/TabBar'
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? 'https://algobot-backend.vercel.app'
@@ -234,12 +234,34 @@ function CoinCard({ coin, state }: { coin: string; state: any }) {
   )
 }
 
+// Goal tracker helper
+function calcMonthsToGoal(balance: number, tradeUsdt: number, goalUsdt: number, winRate: number, tpPct: number, slPct: number, tradesPerMonth: number) {
+  const wr = winRate / 100
+  const avgPnlPerTrade = wr * (tpPct / 100 * tradeUsdt) - (1 - wr) * (slPct / 100 * tradeUsdt)
+  const monthlyProfit = avgPnlPerTrade * tradesPerMonth
+  if (monthlyProfit <= 0) return null
+  const remaining = goalUsdt - balance
+  if (remaining <= 0) return 0
+  return Math.ceil(remaining / monthlyProfit)
+}
+
 // ─── Live Tab ─────────────────────────────────────────────────────────────────
 function LiveTab() {
-  const [portfolio,  setPortfolio]  = useState<any>(null)
-  const [pid,        setPid]        = useState<string | null>(null)
-  const [isStarting, setIsStarting] = useState(false)
-  const [useDemoKey, setUseDemoKey] = useState(false)
+  const [portfolio,   setPortfolio]   = useState<any>(null)
+  const [pid,         setPid]         = useState<string | null>(null)
+  const [isStarting,  setIsStarting]  = useState(false)
+  const [useDemoKey,  setUseDemoKey]  = useState(false)
+  // Capital config
+  const [startBal,    setStartBal]    = useState(100)
+  const [posPct,      setPosPct]      = useState(5)
+  const [goalUsdt,    setGoalUsdt]    = useState(500)
+  // TP/SL config
+  const [tpPct,       setTpPct]       = useState(2.0)
+  const [tp2Pct,      setTp2Pct]      = useState(4.0)
+  const [slPct,       setSlPct]       = useState(1.5)
+
+  const tradeUsdt = useMemo(() => Math.max(1, (startBal * posPct) / 100), [startBal, posPct])
+
   const pollRef = useRef<NodeJS.Timeout | null>(null)
 
   const fetchStatus = useCallback(async (id: string) => {
@@ -264,9 +286,9 @@ function LiveTab() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           interval: '1h',
-          virtual_balance: 2000.0,
-          trade_usdt: 100.0,
-          tp_pct: 2.0, tp2_pct: 4.0, sl_pct: 1.5,
+          virtual_balance: startBal,
+          trade_usdt: tradeUsdt,
+          tp_pct: tpPct, tp2_pct: tp2Pct, sl_pct: slPct,
           use_trend_filter: true,
           use_session_filter: true,
           use_demo_binance: useDemoKey,
@@ -292,8 +314,8 @@ function LiveTab() {
 
   const p            = portfolio
   const isRunning    = p?.status === 'running'
-  const balance      = p?.balance      ?? 2000
-  const initBal      = p?.initial_balance ?? 2000
+  const balance      = p?.balance        ?? startBal
+  const initBal      = p?.initial_balance ?? startBal
   const profit       = balance - initBal
   const wins         = p?.wins ?? 0
   const losses       = p?.losses ?? 0
@@ -302,54 +324,133 @@ function LiveTab() {
   const activeCount  = Object.values(coinStates).filter((cs: any) => cs.open_position).length
   const allCoins     = p?.coins ?? Object.keys(COIN_COLORS)
 
+  const liveWinRate  = totalTrades > 0 ? (wins / totalTrades) * 100 : 50
+  const monthsNeeded = calcMonthsToGoal(balance, tradeUsdt, goalUsdt, liveWinRate, tpPct, slPct, 30)
+  const goalPct      = Math.min(100, ((balance - initBal) / (goalUsdt - initBal)) * 100)
+
   return (
     <div className="space-y-5">
       {/* START PANEL */}
       {!p && (
-        <div className="bg-surface-card border border-surface-border rounded-2xl p-8 flex flex-col items-center gap-5 text-center">
-          <div>
-            <h2 className="text-xl font-bold text-white mb-2">All 20 Coins — Portfolio Paper Trade</h2>
-            <p className="text-gray-500 text-sm max-w-lg">
-              One button click — all 20 coins start simultaneously. Each waits for its own signal,
-              then trades $100. Balance shared across all coins. EMA200 + Session filter ON.
-            </p>
+        <div className="space-y-4">
+          {/* Capital Setup */}
+          <div className="bg-gradient-to-br from-brand/10 via-surface-card to-surface-card border border-brand/30 rounded-2xl p-6">
+            <h2 className="text-lg font-bold text-white mb-1">Capital Setup</h2>
+            <p className="text-xs text-gray-500 mb-5">Configure your starting capital and risk per trade</p>
+
+            <div className="grid grid-cols-3 gap-4 mb-5">
+              <div>
+                <label className="block text-xs text-gray-500 mb-1.5">Starting Balance (USDT)</label>
+                <input type="number" min="10" step="10" value={startBal}
+                  onChange={e => setStartBal(Number(e.target.value))}
+                  className="w-full bg-surface border border-surface-border rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-brand font-mono" />
+                <p className="text-[10px] text-gray-600 mt-1">Your real starting capital</p>
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1.5">Risk per Trade (%)</label>
+                <div className="flex gap-2">
+                  {[2, 3, 5, 10].map(v => (
+                    <button key={v} onClick={() => setPosPct(v)}
+                      className={`flex-1 py-2 rounded-lg text-xs font-bold transition-colors ${posPct === v ? 'bg-brand text-black' : 'bg-surface border border-surface-border text-gray-400 hover:text-white'}`}>
+                      {v}%
+                    </button>
+                  ))}
+                </div>
+                <p className="text-[10px] text-gray-600 mt-1">% of balance per trade</p>
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1.5">Profit Goal (USDT)</label>
+                <input type="number" min="50" step="50" value={goalUsdt}
+                  onChange={e => setGoalUsdt(Number(e.target.value))}
+                  className="w-full bg-surface border border-surface-border rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-brand font-mono" />
+                <p className="text-[10px] text-gray-600 mt-1">Target cumulative profit</p>
+              </div>
+            </div>
+
+            {/* Trade size preview */}
+            <div className="grid grid-cols-4 gap-3 mb-5">
+              {[
+                { label: 'Trade Size', value: `$${tradeUsdt.toFixed(2)}`, sub: `${posPct}% of $${startBal}`, color: 'text-brand' },
+                { label: 'Max Profit/Trade', value: `+$${(tradeUsdt * tpPct / 100).toFixed(2)}`, sub: `TP1 ${tpPct}%`, color: 'text-green-400' },
+                { label: 'Max Loss/Trade', value: `-$${(tradeUsdt * slPct / 100).toFixed(2)}`, sub: `SL ${slPct}%`, color: 'text-red-400' },
+                {
+                  label: 'Months to $' + goalUsdt,
+                  value: monthsNeeded !== null ? (monthsNeeded === 0 ? 'Done!' : `~${monthsNeeded} mo`) : '—',
+                  sub: '50% WR estimate',
+                  color: 'text-yellow-400',
+                },
+              ].map(s => (
+                <div key={s.label} className="bg-surface/60 rounded-lg p-3 text-center">
+                  <p className={`text-lg font-black ${s.color}`}>{s.value}</p>
+                  <p className="text-[10px] text-gray-500 mt-0.5">{s.label}</p>
+                  <p className="text-[9px] text-gray-700">{s.sub}</p>
+                </div>
+              ))}
+            </div>
+
+            {/* TP/SL row */}
+            <div className="grid grid-cols-3 gap-3 mb-5">
+              {[
+                { label: 'TP1 %', val: tpPct,  set: setTpPct  },
+                { label: 'TP2 %', val: tp2Pct, set: setTp2Pct },
+                { label: 'SL %',  val: slPct,  set: setSlPct  },
+              ].map(f => (
+                <div key={f.label}>
+                  <label className="block text-xs text-gray-500 mb-1">{f.label}</label>
+                  <input type="number" step="0.1" value={f.val} onChange={e => f.set(parseFloat(e.target.value))}
+                    className="w-full bg-surface border border-surface-border rounded px-2 py-1.5 text-sm text-white focus:outline-none focus:border-brand" />
+                </div>
+              ))}
+            </div>
+
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <span className="text-xs text-gray-500">Coin list:</span>
+                <span className="text-xs text-gray-300 font-semibold">All 20 coins · Best strategies auto-loaded</span>
+              </div>
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2">
+                  <button onClick={() => setUseDemoKey(!useDemoKey)}
+                    className={`w-9 h-5 rounded-full transition-colors relative ${useDemoKey ? 'bg-brand' : 'bg-gray-700'}`}>
+                    <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-all ${useDemoKey ? 'left-4' : 'left-0.5'}`} />
+                  </button>
+                  <span className="text-xs text-gray-500">Demo Binance orders</span>
+                </div>
+                <button onClick={handleStart} disabled={isStarting}
+                  className="px-8 py-2.5 bg-brand hover:bg-brand/90 text-black font-bold text-sm rounded-xl transition-colors disabled:opacity-50">
+                  {isStarting ? 'Starting...' : `⚡ Start — $${startBal} Capital`}
+                </button>
+              </div>
+            </div>
           </div>
 
-          <div className="flex flex-wrap gap-2 justify-center max-w-2xl">
-            {Object.entries(COIN_LABEL).map(([coin, label]) => (
-              <span key={coin} className="text-[11px] px-2 py-1 rounded-lg font-semibold"
-                style={{ background: (COIN_COLORS[coin] ?? '#888') + '22', color: COIN_COLORS[coin] ?? '#888' }}>
-                {label}
-              </span>
+          {/* Coin chips */}
+          <div className="bg-surface-card border border-surface-border rounded-xl p-4">
+            <p className="text-xs text-gray-500 mb-3">20 coins running simultaneously — each uses its own best strategy from 2024-2025 backtest</p>
+            <div className="flex flex-wrap gap-2">
+              {Object.entries(COIN_LABEL).map(([coin, label]) => (
+                <span key={coin} className="text-[11px] px-2 py-1 rounded-lg font-semibold"
+                  style={{ background: (COIN_COLORS[coin] ?? '#888') + '22', color: COIN_COLORS[coin] ?? '#888' }}>
+                  {label}
+                </span>
+              ))}
+            </div>
+          </div>
+
+          {/* Settings summary */}
+          <div className="bg-surface-card border border-surface-border rounded-xl px-5 py-3 text-xs grid grid-cols-4 gap-4 text-center">
+            {[
+              { label: 'Interval',  value: '1h candles' },
+              { label: 'Filters',   value: 'EMA200 + Session 08–20 UTC' },
+              { label: 'Direction', value: 'Long + Short' },
+              { label: 'Strategy',  value: 'Best per coin from backtest' },
+            ].map(s => (
+              <div key={s.label}>
+                <p className="text-gray-500">{s.label}</p>
+                <p className="text-gray-200 font-semibold mt-0.5">{s.value}</p>
+              </div>
             ))}
           </div>
-
-          <div className="bg-surface border border-surface-border rounded-xl px-6 py-4 text-sm space-y-2 text-left min-w-[300px]">
-            <div className="flex justify-between"><span className="text-gray-500">Virtual Balance</span><span className="text-white font-bold">$2,000</span></div>
-            <div className="flex justify-between"><span className="text-gray-500">Per Trade</span><span className="text-white">$100 fixed</span></div>
-            <div className="flex justify-between"><span className="text-gray-500">Interval</span><span className="text-white">1h candles</span></div>
-            <div className="flex justify-between"><span className="text-gray-500">TP1 / TP2 / SL</span><span className="text-white">2% / 4% / 1.5%</span></div>
-            <div className="flex justify-between"><span className="text-gray-500">Filters</span><span className="text-green-400">EMA200 + Session (08–20 UTC)</span></div>
-            <div className="flex justify-between"><span className="text-gray-500">Long + Short</span><span className="text-white">Both directions</span></div>
-            <div className="flex justify-between items-center">
-              <span className="text-gray-500">Demo Binance orders</span>
-              <button onClick={() => setUseDemoKey(!useDemoKey)}
-                className={`w-10 h-5 rounded-full transition-colors relative ${useDemoKey ? 'bg-brand' : 'bg-gray-700'}`}>
-                <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-all ${useDemoKey ? 'left-5' : 'left-0.5'}`} />
-              </button>
-            </div>
-            {useDemoKey && (
-              <p className="text-[10px] text-yellow-400">
-                Demo Binance mode requires API keys set in Vercel env vars (BINANCE_API_KEY + BINANCE_API_SECRET).
-                Without keys → falls back to virtual simulation.
-              </p>
-            )}
-          </div>
-
-          <button onClick={handleStart} disabled={isStarting}
-            className="px-10 py-3 bg-brand hover:bg-brand/90 text-white font-bold text-base rounded-xl transition-colors disabled:opacity-50">
-            {isStarting ? 'Starting all 20 coins...' : '⚡ Start All 20 Coins'}
-          </button>
         </div>
       )}
 
@@ -374,6 +475,39 @@ function LiveTab() {
               </div>
             ))}
           </div>
+
+          {/* Goal Tracker */}
+          {goalUsdt > 0 && (
+            <div className="bg-surface-card border border-surface-border rounded-xl px-5 py-4">
+              <div className="flex items-center justify-between mb-3">
+                <div>
+                  <p className="text-sm font-semibold text-white">
+                    Profit Goal Tracker
+                    <span className="ml-2 text-xs text-gray-500 font-normal">${initBal.toFixed(0)} → ${(initBal + goalUsdt).toFixed(0)}</span>
+                  </p>
+                  <p className="text-xs text-gray-600 mt-0.5">
+                    Current profit: <span className={profit >= 0 ? 'text-green-400' : 'text-red-400'}>${profit.toFixed(2)}</span>
+                    {monthsNeeded !== null && monthsNeeded > 0 && (
+                      <span className="ml-2 text-yellow-400">~{monthsNeeded} month{monthsNeeded > 1 ? 's' : ''} to go at current rate</span>
+                    )}
+                    {monthsNeeded === 0 && <span className="ml-2 text-green-400 font-bold">GOAL REACHED!</span>}
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className="text-xl font-black text-brand">{Math.max(0, goalPct).toFixed(1)}%</p>
+                  <p className="text-[10px] text-gray-600">of goal</p>
+                </div>
+              </div>
+              <div className="h-3 bg-surface rounded-full overflow-hidden">
+                <div className={`h-full rounded-full transition-all duration-500 ${goalPct >= 100 ? 'bg-green-400' : 'bg-brand'}`}
+                  style={{ width: `${Math.max(0, Math.min(100, goalPct))}%` }} />
+              </div>
+              <div className="flex justify-between text-[10px] text-gray-600 mt-1">
+                <span>$0</span>
+                <span>Goal: +${goalUsdt}</span>
+              </div>
+            </div>
+          )}
 
           {/* Control buttons */}
           <div className="flex items-center justify-between">
