@@ -75,6 +75,7 @@ async def _paper_loop(session_id: str, config: dict):
     tp2_pct      = config["tp2_pct"]
     sl_pct       = config["sl_pct"]
     trade_usdt   = config["trade_usdt"]
+    position_pct = config.get("position_pct", 0.0)   # compound mode: % of balance
     use_trend    = config.get("use_trend_filter", True)
     ema_period   = config.get("trend_ema_period", 200)
     use_session  = config.get("use_session_filter", True)
@@ -152,7 +153,9 @@ async def _paper_loop(session_id: str, config: dict):
             # ── Look for new entry ───────────────────────────────────────────
             if not _sessions[session_id]["open_position"] and _sessions[session_id]["status"] == "running":
                 balance = _sessions[session_id]["balance"]
-                if balance < trade_usdt:
+                # Compound mode: position size = % of current balance
+                actual_trade = round(balance * position_pct, 2) if position_pct > 0 else trade_usdt
+                if balance < actual_trade or actual_trade < 1:
                     await emit_log("WARN", f"[Paper {session_id}] Low balance ${balance:.2f}")
                 else:
                     # Session filter
@@ -184,17 +187,18 @@ async def _paper_loop(session_id: str, config: dict):
                         tp2  = round(ep * (1 + mult * tp2_pct / 100), 8)
                         sl   = round(ep * (1 - mult * sl_pct  / 100), 8)
 
-                        _sessions[session_id]["balance"] -= trade_usdt
+                        _sessions[session_id]["balance"] -= actual_trade
                         _sessions[session_id]["open_position"] = {
                             "symbol":    symbol,
                             "direction": direction,
                             "entry":     round(ep, 8),
                             "tp": tp, "tp2": tp2, "sl": sl,
-                            "trade_usdt": trade_usdt,
+                            "trade_usdt": actual_trade,
                             "signal_meta": meta,
                             "opened_at": datetime.utcnow().isoformat(),
                         }
-                        await emit_log("INFO", f"[Paper {session_id}] ENTER {direction.upper()} {symbol} @ {ep:.4f} | TP:{tp:.4f} SL:{sl:.4f}")
+                        mode_note = f"({position_pct*100:.0f}% compound)" if position_pct > 0 else ""
+                        await emit_log("INFO", f"[Paper {session_id}] ENTER {direction.upper()} {symbol} @ {ep:.4f} ${actual_trade:.0f} {mode_note} | TP:{tp:.4f} SL:{sl:.4f}")
 
         except Exception as e:
             await emit_log("ERROR", f"[Paper {session_id}] Error: {str(e)}")

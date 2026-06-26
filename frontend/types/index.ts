@@ -79,6 +79,7 @@ export interface TradeSessionConfig {
   trend_ema_period?: number
   use_session_filter?: boolean
   min_confluence?: number
+  position_pct?: number
 }
 
 export interface OpenPosition {

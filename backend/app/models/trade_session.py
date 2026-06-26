@@ -12,6 +12,7 @@ class TradeSessionRequest(BaseModel):
     sl_pct: float = 1.5
     trade_usdt: float = 100.0
     virtual_balance: float = 10000.0   # paper trade only
+    position_pct: float = 0.0          # 0 = use fixed trade_usdt; >0 = % of balance (compound mode)
 
     # Smart filters
     use_trend_filter: bool = True
