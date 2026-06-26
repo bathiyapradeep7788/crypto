@@ -12,14 +12,14 @@ router = APIRouter()
 
 class PortfolioStartRequest(BaseModel):
     coins: List[str] = ALL_COINS
-    interval: str = "1h"
+    interval: str = "15m"          # upgraded default: 4x more signals
     virtual_balance: float = 2000.0
     trade_usdt: float = 100.0
-    tp_pct: float = 2.0
-    tp2_pct: float = 4.0
+    tp_pct: float = 3.0            # upgraded default: 1:2 R:R
+    tp2_pct: float = 4.5
     sl_pct: float = 1.5
-    use_trend_filter: bool = True
-    use_session_filter: bool = True
+    use_trend_filter: bool = True   # keep EMA200 for quality
+    use_session_filter: bool = False # upgraded default: 24/7 trading
     use_demo_binance: bool = False
 
 
