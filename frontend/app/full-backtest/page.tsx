@@ -3,6 +3,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import TabBar from '@/components/layout/TabBar'
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
+// Note: Full Run uses BackgroundTasks — works on Render (persistent server), not Vercel serverless
 
 const COIN_COLORS: Record<string, string> = {
   OPUSDT:'#378ADD', NEARUSDT:'#1D9E75', TIAUSDT:'#BA7517', SOLUSDT:'#7F77DD',

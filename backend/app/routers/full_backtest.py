@@ -8,11 +8,12 @@ DELETE /full-backtest/clear-db — wipe backtest_results
 import asyncio, uuid
 from fastapi import APIRouter, BackgroundTasks
 from pydantic import BaseModel
-from typing import Optional
 from datetime import datetime, timezone
-import httpx
 
 from app.config import settings
+from app.core.task_runner import run_backtest_pipeline
+from app.models.backtest_request import BacktestRequest
+from app.services import job_store
 
 router = APIRouter()
 
@@ -74,25 +75,27 @@ def _months(years: list[int]):
     return months
 
 
-async def _run_one(client, coin, start, end, tp, sl, interval, trend, session):
-    payload = {
-        "coins":              [coin],
-        "start_dt":           start.isoformat(),
-        "end_dt":             end.isoformat(),
-        "strategies":         COIN_BEST_STRATEGIES[coin],
-        "tp_pct":             tp,
-        "tp2_pct":            tp * 1.5,
-        "sl_pct":             sl,
-        "interval":           interval,
-        "use_trend_filter":   trend,
-        "use_session_filter": session,
-        "min_confluence":     1,
-    }
+async def _run_one(coin, start, end, tp, sl, interval, trend, session):
+    req = BacktestRequest(
+        coins=[coin],
+        start_dt=start,
+        end_dt=end,
+        strategies=COIN_BEST_STRATEGIES[coin],
+        tp_pct=tp,
+        tp2_pct=round(tp * 1.5, 2),
+        sl_pct=sl,
+        interval=interval,
+        use_trend_filter=trend,
+        use_session_filter=session,
+        min_confluence=1,
+    )
     try:
-        r = await client.post("http://127.0.0.1:8000/backtest/run", json=payload, timeout=300)
-        return r.json().get("results", [])
+        job_id = str(uuid.uuid4())
+        job_store.create_job(job_id, len(req.resolved_strategies()))
+        results = await run_backtest_pipeline(job_id, req)
+        return results
     except Exception as e:
-        _log(f"  ERROR {coin}: {e}")
+        _log(f"  ERROR {coin} {start.strftime('%Y-%m')}: {e}")
         return []
 
 
@@ -117,26 +120,28 @@ async def _full_run(job_id, years, tp, sl, interval, trend, session, batch_size)
     _log(f"Starting {_state['total']} calls ({len(ALL_COINS)} coins x {len(months)} months)")
 
     try:
-        async with httpx.AsyncClient() as client:
-            for start, end, label in months:
+        for start, end, label in months:
+            if _state["_stop"]:
+                break
+            _log(f"=== {label} ===")
+            for i in range(0, len(ALL_COINS), batch_size):
                 if _state["_stop"]:
                     break
-                _log(f"=== {label} ===")
-                for i in range(0, len(ALL_COINS), batch_size):
-                    if _state["_stop"]:
-                        break
-                    batch = ALL_COINS[i:i + batch_size]
-                    _state["current"] = f"{label} — {', '.join(c.replace('USDT','') for c in batch)}"
-                    tasks = [_run_one(client, c, start, end, tp, sl, interval, trend, session) for c in batch]
-                    batch_res = await asyncio.gather(*tasks)
-                    for coin, res in zip(batch, batch_res):
-                        stat = _stat(res)
-                        if coin not in _state["results"]:
-                            _state["results"][coin] = {}
-                        _state["results"][coin][label] = stat
-                        _state["done"] += 1
-                        wr = stat["wins"] / stat["trades"] * 100 if stat["trades"] else 0
-                        _log(f"  {coin.replace('USDT',''):<8} {label}  {stat['trades']:4d} trades  {wr:.1f}% WR")
+                batch = ALL_COINS[i:i + batch_size]
+                _state["current"] = f"{label} — {', '.join(c.replace('USDT','') for c in batch)}"
+                tasks = [_run_one(c, start, end, tp, sl, interval, trend, session) for c in batch]
+                batch_res = await asyncio.gather(*tasks, return_exceptions=True)
+                for coin, res in zip(batch, batch_res):
+                    if isinstance(res, Exception):
+                        _log(f"  SKIP {coin}: {res}")
+                        res = []
+                    stat = _stat(res)
+                    if coin not in _state["results"]:
+                        _state["results"][coin] = {}
+                    _state["results"][coin][label] = stat
+                    _state["done"] += 1
+                    wr = stat["wins"] / stat["trades"] * 100 if stat["trades"] else 0
+                    _log(f"  {coin.replace('USDT',''):<8} {label}  {stat['trades']:4d} trades  {wr:.1f}% WR")
 
         _state["status"] = "stopped" if _state["_stop"] else "done"
         _log("Complete!" if not _state["_stop"] else "Stopped by user.")
