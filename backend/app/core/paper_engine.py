@@ -18,6 +18,13 @@ _CANDLE_LIMIT = 300
 _sessions: dict = {}
 
 
+def _get_supabase():
+    if not settings.supabase_url or not settings.supabase_key:
+        return None
+    from supabase import create_client
+    return create_client(settings.supabase_url, settings.supabase_key)
+
+
 def get_all_sessions() -> dict:
     return _sessions
 
@@ -28,12 +35,13 @@ def get_session(session_id: str) -> dict:
 
 async def start_paper_session(config: dict) -> str:
     session_id = str(uuid.uuid4())[:8]
+    strategies = config.get("strategies") or [config["strategy_primary"]]
     _sessions[session_id] = {
         "session_id": session_id,
         "mode": "paper",
         "status": "running",
         "coin": config["coin"],
-        "strategy": config.get("strategies") or [config["strategy_primary"]],
+        "strategy": strategies,
         "interval": config["interval"],
         "balance": config["virtual_balance"],
         "initial_balance": config["virtual_balance"],
@@ -54,9 +62,28 @@ async def start_paper_session(config: dict) -> str:
         },
         "ai_min_confidence": config.get("ai_min_confidence", 60),
     }
+    # Save session to DB
+    try:
+        db = _get_supabase()
+        if db:
+            db.table("paper_trade_sessions").insert({
+                "id": session_id,
+                "coin": config["coin"],
+                "strategies": strategies,
+                "interval": config["interval"],
+                "initial_balance": config["virtual_balance"],
+                "final_balance": config["virtual_balance"],
+                "trade_usdt": config["trade_usdt"],
+                "tp_pct": config.get("tp_pct", 2.0),
+                "sl_pct": config.get("sl_pct", 1.5),
+                "status": "running",
+                "started_at": datetime.utcnow().isoformat(),
+            }).execute()
+    except Exception as e:
+        await emit_log("ERROR", f"[Paper] Session DB save failed: {str(e)}")
+
     asyncio.create_task(_paper_loop(session_id, config))
-    strats = config.get("strategies") or [config["strategy_primary"]]
-    await emit_log("INFO", f"[Paper {session_id}] Started — {config['coin']} / {','.join(strats)} / {config['interval']}")
+    await emit_log("INFO", f"[Paper {session_id}] Started — {config['coin']} / {','.join(strategies)} / {config['interval']}")
     return session_id
 
 
@@ -64,6 +91,30 @@ async def stop_paper_session(session_id: str):
     if session_id in _sessions:
         _sessions[session_id]["status"] = "stopped"
         await emit_log("INFO", f"[Paper {session_id}] Stopped by user")
+        await _update_session_summary(session_id, "stopped")
+
+
+async def _update_session_summary(session_id: str, status: str = "running"):
+    s = _sessions.get(session_id)
+    if not s:
+        return
+    try:
+        db = _get_supabase()
+        if db:
+            update = {
+                "final_balance": round(s["balance"], 2),
+                "total_pnl_usdt": round(s["total_pnl_usdt"], 2),
+                "total_pnl_pct": round(s["total_pnl_pct"], 4),
+                "wins": s["wins"],
+                "losses": s["losses"],
+                "total_trades": s["wins"] + s["losses"],
+                "status": status,
+            }
+            if status in ("stopped", "completed"):
+                update["stopped_at"] = datetime.utcnow().isoformat()
+            db.table("paper_trade_sessions").update(update).eq("id", session_id).execute()
+    except Exception as e:
+        await emit_log("ERROR", f"[Paper] Session summary update failed: {str(e)}")
 
 
 async def _paper_loop(session_id: str, config: dict):
@@ -75,7 +126,7 @@ async def _paper_loop(session_id: str, config: dict):
     tp2_pct      = config["tp2_pct"]
     sl_pct       = config["sl_pct"]
     trade_usdt   = config["trade_usdt"]
-    position_pct = config.get("position_pct", 0.0)   # compound mode: % of balance
+    position_pct = config.get("position_pct", 0.0)
     use_trend    = config.get("use_trend_filter", True)
     ema_period   = config.get("trend_ema_period", 200)
     use_session  = config.get("use_session_filter", True)
@@ -149,21 +200,19 @@ async def _paper_loop(session_id: str, config: dict):
                     _sessions[session_id]["open_position"] = None
                     await emit_log("INFO", f"[Paper {session_id}] {symbol} {exit_reason} @ {exit_price:.4f} | PnL: {profit_pct:+.2f}% (${profit_usdt:+.2f})")
                     await _save_paper_trade(session_id, closed)
+                    await _update_session_summary(session_id, "running")
 
             # ── Look for new entry ───────────────────────────────────────────
             if not _sessions[session_id]["open_position"] and _sessions[session_id]["status"] == "running":
                 balance = _sessions[session_id]["balance"]
-                # Compound mode: position size = % of current balance
                 actual_trade = round(balance * position_pct, 2) if position_pct > 0 else trade_usdt
                 if balance < actual_trade or actual_trade < 1:
                     await emit_log("WARN", f"[Paper {session_id}] Low balance ${balance:.2f}")
                 else:
-                    # Session filter
                     if use_session and not in_active_session(now):
                         await asyncio.sleep(interval_sec)
                         continue
 
-                    # Get signal
                     if min_conf > 1 and len(strategies) > 1:
                         result = get_voted_signal(strategies, {}, candles, min_conf)
                     else:
@@ -172,7 +221,6 @@ async def _paper_loop(session_id: str, config: dict):
                     if result:
                         direction, meta = result
 
-                        # Trend filter
                         if use_trend:
                             trend = trend_direction(candles, ema_period)
                             if trend is not None:
@@ -207,25 +255,24 @@ async def _paper_loop(session_id: str, config: dict):
 
 
 async def _save_paper_trade(session_id: str, trade: dict):
-    if not settings.supabase_url or not settings.supabase_key:
-        return
     try:
-        from supabase import create_client
-        client = create_client(settings.supabase_url, settings.supabase_key)
-        client.table("paper_trades").insert({
-            "session_id":  session_id,
-            "coin":        trade["symbol"],
-            "direction":   trade["direction"],
-            "entry_price": trade["entry"],
-            "tp":          trade["tp"],
-            "tp2":         trade["tp2"],
-            "sl":          trade["sl"],
-            "exit_price":  trade["exit_price"],
-            "exit_reason": trade["exit_reason"],
-            "profit_pct":  trade["profit_pct"],
-            "profit_usdt": trade["profit_usdt"],
-            "opened_at":   trade["opened_at"],
-            "closed_at":   trade["closed_at"],
-        }).execute()
+        db = _get_supabase()
+        if db:
+            db.table("paper_trades").insert({
+                "session_id":  session_id,
+                "coin":        trade["symbol"],
+                "direction":   trade["direction"],
+                "entry_price": trade["entry"],
+                "tp":          trade["tp"],
+                "tp2":         trade["tp2"],
+                "sl":          trade["sl"],
+                "exit_price":  trade["exit_price"],
+                "exit_reason": trade["exit_reason"],
+                "profit_pct":  trade["profit_pct"],
+                "profit_usdt": trade["profit_usdt"],
+                "trade_usdt":  trade.get("trade_usdt", 100),
+                "opened_at":   trade["opened_at"],
+                "closed_at":   trade["closed_at"],
+            }).execute()
     except Exception as e:
         await emit_log("ERROR", f"[Paper] DB save failed: {str(e)}")
