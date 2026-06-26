@@ -3,9 +3,10 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 
 const TABS = [
-  { href: '/backtest',    label: '① Backtest'          },
-  { href: '/reports',     label: '② Analyze'           },
-  { href: '/portfolio',   label: '③ Portfolio Bot'     },
+  { href: '/backtest',      label: '① Backtest'      },
+  { href: '/full-backtest', label: '② Full Run'       },
+  { href: '/reports',       label: '③ Analyze'        },
+  { href: '/portfolio',     label: '④ Portfolio Bot'  },
   { href: '/paper-trade', label: 'Paper Trade'          },
   { href: '/live-trade',  label: 'Live Actual Trade'   },
   { href: '/database',    label: 'Database'             },
