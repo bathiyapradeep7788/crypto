@@ -21,3 +21,6 @@ Thumbs.db
 # Private setup file — never push
 SETUP_AND_KEYS.txt
 api_keys.txt
+vercel-token.txt
+*.token.txt
+push_to_github.bat
