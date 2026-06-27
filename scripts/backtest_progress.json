@@ -1,0 +1,1278 @@
+{
+  "done": [
+    "2024-02_AVAXUSDT",
+    "2024-01_ARBUSDT",
+    "2024-07_BNBUSDT",
+    "2024-09_NEARUSDT",
+    "2024-07_ETHUSDT",
+    "2024-09_ADAUSDT",
+    "2024-02_TIAUSDT",
+    "2024-04_APTUSDT",
+    "2024-08_MATICUSDT",
+    "2024-07_MATICUSDT",
+    "2024-01_UNIUSDT",
+    "2024-06_APTUSDT",
+    "2024-08_APTUSDT",
+    "2024-02_LTCUSDT",
+    "2024-07_NEARUSDT",
+    "2024-02_MATICUSDT",
+    "2024-05_XRPUSDT",
+    "2024-09_ETHUSDT",
+    "2024-09_ATOMUSDT",
+    "2024-05_ATOMUSDT",
+    "2024-09_ARBUSDT",
+    "2024-05_TIAUSDT",
+    "2024-08_XRPUSDT",
+    "2024-08_INJUSDT",
+    "2024-05_ETHUSDT",
+    "2024-01_MATICUSDT",
+    "2024-01_ADAUSDT",
+    "2024-06_SOLUSDT",
+    "2024-08_ATOMUSDT",
+    "2024-04_INJUSDT",
+    "2024-03_XRPUSDT",
+    "2024-01_NEARUSDT",
+    "2024-06_XRPUSDT",
+    "2024-08_SOLUSDT",
+    "2024-07_XRPUSDT",
+    "2024-07_SOLUSDT",
+    "2024-02_NEARUSDT",
+    "2024-03_INJUSDT",
+    "2024-03_ETHUSDT",
+    "2024-08_DOGEUSDT",
+    "2024-03_APTUSDT",
+    "2024-03_MATICUSDT",
+    "2024-03_DOTUSDT",
+    "2024-06_UNIUSDT",
+    "2024-04_NEARUSDT",
+    "2024-05_ARBUSDT",
+    "2024-02_LINKUSDT",
+    "2024-07_INJUSDT",
+    "2024-06_NEARUSDT",
+    "2024-07_LINKUSDT",
+    "2024-06_AVAXUSDT",
+    "2024-04_ARBUSDT",
+    "2024-03_OPUSDT",
+    "2024-02_DOGEUSDT",
+    "2024-05_LINKUSDT",
+    "2024-05_LTCUSDT",
+    "2024-05_AVAXUSDT",
+    "2024-01_LINKUSDT",
+    "2024-08_DOTUSDT",
+    "2024-07_ADAUSDT",
+    "2024-08_LTCUSDT",
+    "2024-03_ARBUSDT",
+    "2024-02_BTCUSDT",
+    "2024-06_LTCUSDT",
+    "2024-04_LINKUSDT",
+    "2024-04_BTCUSDT",
+    "2024-04_ATOMUSDT",
+    "2024-06_ADAUSDT",
+    "2024-07_DOTUSDT",
+    "2024-04_DOGEUSDT",
+    "2024-02_UNIUSDT",
+    "2024-01_AVAXUSDT",
+    "2024-06_LINKUSDT",
+    "2024-06_ARBUSDT",
+    "2024-07_BTCUSDT",
+    "2024-04_DOTUSDT",
+    "2024-03_LTCUSDT",
+    "2024-04_OPUSDT",
+    "2024-07_OPUSDT",
+    "2024-08_LINKUSDT",
+    "2024-05_SOLUSDT",
+    "2024-09_INJUSDT",
+    "2024-07_AVAXUSDT",
+    "2024-07_ATOMUSDT",
+    "2024-06_BNBUSDT",
+    "2024-03_DOGEUSDT",
+    "2024-05_BTCUSDT",
+    "2024-01_BTCUSDT",
+    "2024-05_ADAUSDT",
+    "2024-07_LTCUSDT",
+    "2024-08_ARBUSDT",
+    "2024-04_XRPUSDT",
+    "2024-02_APTUSDT",
+    "2024-04_UNIUSDT",
+    "2024-01_ATOMUSDT",
+    "2024-01_BNBUSDT",
+    "2024-05_MATICUSDT",
+    "2024-01_OPUSDT",
+    "2024-02_INJUSDT",
+    "2024-09_LINKUSDT",
+    "2024-02_ATOMUSDT",
+    "2024-02_XRPUSDT",
+    "2024-04_BNBUSDT",
+    "2024-02_SOLUSDT",
+    "2024-05_OPUSDT",
+    "2024-08_OPUSDT",
+    "2024-02_ARBUSDT",
+    "2024-06_ETHUSDT",
+    "2024-09_OPUSDT",
+    "2024-05_NEARUSDT",
+    "2024-01_TIAUSDT",
+    "2024-09_APTUSDT",
+    "2024-09_AVAXUSDT",
+    "2024-04_TIAUSDT",
+    "2024-05_APTUSDT",
+    "2024-04_MATICUSDT",
+    "2024-03_TIAUSDT",
+    "2024-08_BTCUSDT",
+    "2024-07_ARBUSDT",
+    "2024-02_OPUSDT",
+    "2024-07_TIAUSDT",
+    "2024-03_BNBUSDT",
+    "2024-03_BTCUSDT",
+    "2024-03_NEARUSDT",
+    "2024-09_BNBUSDT",
+    "2024-06_ATOMUSDT",
+    "2024-09_DOTUSDT",
+    "2024-06_TIAUSDT",
+    "2024-06_DOTUSDT",
+    "2024-09_BTCUSDT",
+    "2024-05_BNBUSDT",
+    "2024-03_UNIUSDT",
+    "2024-06_OPUSDT",
+    "2024-02_ADAUSDT",
+    "2024-05_INJUSDT",
+    "2024-04_LTCUSDT",
+    "2024-08_UNIUSDT",
+    "2024-09_XRPUSDT",
+    "2024-02_BNBUSDT",
+    "2024-04_ADAUSDT",
+    "2024-03_AVAXUSDT",
+    "2024-09_SOLUSDT",
+    "2024-01_XRPUSDT",
+    "2024-03_SOLUSDT",
+    "2024-07_APTUSDT",
+    "2024-07_UNIUSDT",
+    "2024-08_NEARUSDT",
+    "2024-08_AVAXUSDT",
+    "2024-02_ETHUSDT",
+    "2024-04_SOLUSDT",
+    "2024-01_APTUSDT",
+    "2024-06_INJUSDT",
+    "2024-01_ETHUSDT",
+    "2024-07_DOGEUSDT",
+    "2024-08_BNBUSDT",
+    "2024-06_MATICUSDT",
+    "2024-01_SOLUSDT",
+    "2024-05_DOGEUSDT",
+    "2024-06_BTCUSDT",
+    "2024-08_ETHUSDT",
+    "2024-01_DOGEUSDT",
+    "2024-01_INJUSDT",
+    "2024-05_UNIUSDT",
+    "2024-09_DOGEUSDT",
+    "2024-02_DOTUSDT",
+    "2024-03_ADAUSDT",
+    "2024-03_ATOMUSDT",
+    "2024-03_LINKUSDT",
+    "2024-05_DOTUSDT",
+    "2024-08_TIAUSDT",
+    "2024-01_DOTUSDT",
+    "2024-04_AVAXUSDT",
+    "2024-08_ADAUSDT",
+    "2024-01_LTCUSDT",
+    "2024-06_DOGEUSDT",
+    "2024-04_ETHUSDT"
+  ],
+  "results": {
+    "BTCUSDT": {
+      "2024-01": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-02": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-03": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-04": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-05": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-06": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-07": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-08": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-09": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      }
+    },
+    "ETHUSDT": {
+      "2024-01": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-02": {
+        "trades": 1522,
+        "wins": 682,
+        "losses": 840,
+        "pnl": 796.4956000000001
+      },
+      "2024-03": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-04": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-05": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-06": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-07": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-08": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-09": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      }
+    },
+    "SOLUSDT": {
+      "2024-01": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-02": {
+        "trades": 1514,
+        "wins": 520,
+        "losses": 994,
+        "pnl": 84.0
+      },
+      "2024-03": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-04": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-05": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-06": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-07": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-08": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-09": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      }
+    },
+    "BNBUSDT": {
+      "2024-01": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-02": {
+        "trades": 1545,
+        "wins": 636,
+        "losses": 909,
+        "pnl": 541.7478999999998
+      },
+      "2024-03": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-04": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-05": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-06": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-07": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-08": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-09": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      }
+    },
+    "XRPUSDT": {
+      "2024-01": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-02": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-03": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-04": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-05": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-06": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-07": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-08": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-09": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      }
+    },
+    "ADAUSDT": {
+      "2024-01": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-02": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-03": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-04": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-05": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-06": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-07": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-08": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-09": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      }
+    },
+    "DOGEUSDT": {
+      "2024-01": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-02": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-03": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-04": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-05": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-06": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-07": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-08": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-09": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      }
+    },
+    "AVAXUSDT": {
+      "2024-01": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-02": {
+        "trades": 493,
+        "wins": 194,
+        "losses": 299,
+        "pnl": 133.5
+      },
+      "2024-03": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-04": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-05": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-06": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-07": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-08": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-09": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      }
+    },
+    "DOTUSDT": {
+      "2024-01": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-02": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-03": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-04": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-05": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-06": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-07": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-08": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-09": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      }
+    },
+    "LINKUSDT": {
+      "2024-01": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-02": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-03": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-04": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-05": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-06": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-07": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-08": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-09": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      }
+    },
+    "NEARUSDT": {
+      "2024-01": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-02": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-03": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-04": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-05": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-06": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-07": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-08": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-09": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      }
+    },
+    "INJUSDT": {
+      "2024-01": {
+        "trades": 1689,
+        "wins": 585,
+        "losses": 1104,
+        "pnl": 162.55110000000005
+      },
+      "2024-02": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-03": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-04": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-05": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-06": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-07": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-08": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-09": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      }
+    },
+    "ARBUSDT": {
+      "2024-01": {
+        "trades": 1473,
+        "wins": 551,
+        "losses": 922,
+        "pnl": 363.3852
+      },
+      "2024-02": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-03": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-04": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-05": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-06": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-07": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-08": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-09": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      }
+    },
+    "OPUSDT": {
+      "2024-01": {
+        "trades": 1490,
+        "wins": 558,
+        "losses": 932,
+        "pnl": 340.611
+      },
+      "2024-02": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-03": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-04": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-05": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-06": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-07": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-08": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-09": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      }
+    },
+    "APTUSDT": {
+      "2024-01": {
+        "trades": 1581,
+        "wins": 573,
+        "losses": 1008,
+        "pnl": 282.6863000000001
+      },
+      "2024-02": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-03": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-04": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-05": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-06": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-07": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-08": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-09": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      }
+    },
+    "ATOMUSDT": {
+      "2024-01": {
+        "trades": 1871,
+        "wins": 530,
+        "losses": 1341,
+        "pnl": -436.3743000000001
+      },
+      "2024-02": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-03": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-04": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-05": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-06": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-07": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-08": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-09": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      }
+    },
+    "MATICUSDT": {
+      "2024-01": {
+        "trades": 1095,
+        "wins": 441,
+        "losses": 654,
+        "pnl": 408.73609999999996
+      },
+      "2024-02": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-03": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-04": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-05": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-06": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-07": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-08": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      }
+    },
+    "TIAUSDT": {
+      "2024-01": {
+        "trades": 1629,
+        "wins": 528,
+        "losses": 1101,
+        "pnl": -8.818700000000007
+      },
+      "2024-02": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-03": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-04": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-05": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-06": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-07": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-08": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      }
+    },
+    "LTCUSDT": {
+      "2024-01": {
+        "trades": 975,
+        "wins": 367,
+        "losses": 608,
+        "pnl": 302.5500999999999
+      },
+      "2024-02": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-03": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-04": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-05": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-06": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-07": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-08": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      }
+    },
+    "UNIUSDT": {
+      "2024-01": {
+        "trades": 516,
+        "wins": 233,
+        "losses": 283,
+        "pnl": 280.6729
+      },
+      "2024-02": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-03": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-04": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-05": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-06": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-07": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      },
+      "2024-08": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0
+      }
+    }
+  }
+}

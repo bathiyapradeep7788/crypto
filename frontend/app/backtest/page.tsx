@@ -10,6 +10,10 @@ import { listCombined }       from '@/lib/api'
 import { CombinedStrategy }   from '@/types'
 import { DEFAULT_PARAMS, INTERVALS, COINS, COIN_BEST_SETTINGS } from '@/lib/constants'
 
+// ── inline sub-page imports ───────────────────────────────────────────────────
+import FullRunSubTab  from '@/app/backtest/FullRunSubTab'
+import ReportsSubTab  from '@/app/backtest/ReportsSubTab'
+
 function Toggle({ label, sub, checked, onChange }: {
   label: string; sub?: string; checked: boolean; onChange: (v: boolean) => void
 }) {
@@ -42,6 +46,8 @@ function grade(wr: number) {
 }
 
 export default function BacktestPage() {
+  const [mainTab, setMainTab] = useState<'backtest' | 'fullrun' | 'reports'>('backtest')
+
   const { run, runPerCoin, stop, status, progress, results, error } = useBacktestCtx()
 
   // Smart Mode state
@@ -58,7 +64,7 @@ export default function BacktestPage() {
   // Shared
   const [startDt,  setStartDt]  = useState('2024-01-01T00:00')
   const [endDt,    setEndDt]    = useState('2024-12-31T00:00')
-  const [interval, setInterval] = useState('1h')
+  const [interval, setInterval] = useState('15m')
   const [tpPct,    setTpPct]    = useState(2.0)
   const [tp2Pct,   setTp2Pct]   = useState(4.0)
   const [slPct,    setSlPct]    = useState(1.5)
@@ -134,14 +140,34 @@ export default function BacktestPage() {
   const toggleSmartCoin = (c: string) =>
     setSmartCoins(prev => prev.includes(c) ? prev.filter(x => x !== c) : [...prev, c])
 
+  if (mainTab === 'fullrun') return <FullRunSubTab onBack={() => setMainTab('backtest')} />
+  if (mainTab === 'reports') return <ReportsSubTab onBack={() => setMainTab('backtest')} />
+
   return (
     <div className="min-h-screen bg-surface">
       <TabBar />
       <main className="max-w-screen-2xl mx-auto px-6 py-6">
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h1 className="text-xl font-bold text-white">Backtest Bot</h1>
-            <p className="text-xs text-gray-500 mt-0.5">Simulate strategies against historical Binance data</p>
+            <h1 className="text-xl font-bold text-white">Backtest</h1>
+            <p className="text-xs text-gray-500 mt-0.5">Simulate 10 strategies × 20 coins · 15m candles · Binance data</p>
+          </div>
+          <div className="flex items-center gap-3">
+            {/* Sub-tab switcher */}
+            <div className="flex bg-surface-card border border-surface-border rounded-lg p-0.5 gap-0.5">
+              <button onClick={() => setMainTab('backtest')}
+                className="px-3 py-1.5 rounded-md text-xs font-semibold bg-brand text-black">
+                Backtest
+              </button>
+              <button onClick={() => setMainTab('fullrun')}
+                className="px-3 py-1.5 rounded-md text-xs font-medium text-gray-400 hover:text-white transition-colors">
+                Full Run (Monthly)
+              </button>
+              <button onClick={() => setMainTab('reports')}
+                className="px-3 py-1.5 rounded-md text-xs font-medium text-gray-400 hover:text-white transition-colors">
+                Analyze / Reports
+              </button>
+            </div>
           </div>
           <div className="flex items-center gap-3">
             {/* Smart Mode toggle */}

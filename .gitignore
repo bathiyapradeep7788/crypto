@@ -20,3 +20,4 @@ Thumbs.db
 
 # Private setup file — never push
 SETUP_AND_KEYS.txt
+api_keys.txt

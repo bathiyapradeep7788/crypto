@@ -254,6 +254,51 @@ async def _paper_loop(session_id: str, config: dict):
         await asyncio.sleep(interval_sec)
 
 
+async def mark_as_think(session_id: str) -> dict:
+    """Close current open position at current price, save as 'Think' — for manual/auto review."""
+    s = _sessions.get(session_id)
+    if not s:
+        return {"error": "Session not found"}
+    open_pos = s.get("open_position")
+    if not open_pos:
+        return {"error": "No open position to mark as think"}
+
+    current_price = s.get("current_price") or open_pos["entry"]
+    direction = open_pos["direction"]
+    entry     = open_pos["entry"]
+    mult      = 1 if direction == "long" else -1
+    profit_pct  = round((current_price - entry) / entry * 100 * mult, 4)
+    trade_usdt  = open_pos.get("trade_usdt", 100)
+    profit_usdt = round(trade_usdt * profit_pct / 100, 4)
+
+    closed = {
+        **open_pos,
+        "exit_price":  round(current_price, 8),
+        "exit_reason": "Think",
+        "profit_pct":  profit_pct,
+        "profit_usdt": profit_usdt,
+        "win":         profit_pct > 0,
+        "closed_at":   datetime.utcnow().isoformat(),
+    }
+
+    s["balance"] += trade_usdt + profit_usdt
+    s["total_pnl_pct"]  += profit_pct
+    s["total_pnl_usdt"] += profit_usdt
+    if profit_pct > 0:
+        s["wins"] += 1
+    else:
+        s["losses"] += 1
+
+    s["closed_trades"].append(closed)
+    s["open_position"] = None
+
+    await emit_log("INFO", f"[Paper {session_id}] THINK close {open_pos['symbol']} @ {current_price:.4f} | PnL: {profit_pct:+.2f}%")
+    await _save_paper_trade(session_id, closed)
+    await _update_session_summary(session_id, "running")
+
+    return {"status": "ok", "exit_price": current_price, "profit_pct": profit_pct, "profit_usdt": profit_usdt}
+
+
 async def _save_paper_trade(session_id: str, trade: dict):
     try:
         db = _get_supabase()

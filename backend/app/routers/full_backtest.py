@@ -30,27 +30,69 @@ _state: dict = {
     "_stop":    False,
 }
 
+# All 10 strategies per coin — ordered by effectiveness for that coin.
+# Backtest runs each coin with its ordered strategy list (best strategies first).
 COIN_BEST_STRATEGIES = {
-    "BTCUSDT":   ["support_resistance", "bollinger_squeeze", "fibonacci"],
-    "ETHUSDT":   ["bollinger_squeeze", "volume_momentum", "ichimoku"],
-    "SOLUSDT":   ["volume_momentum", "ichimoku", "bollinger_squeeze"],
-    "BNBUSDT":   ["volume_momentum", "ichimoku", "bollinger_squeeze"],
-    "XRPUSDT":   ["ema_crossover", "ichimoku"],
-    "ADAUSDT":   ["ema_crossover", "volume_momentum", "support_resistance"],
-    "DOGEUSDT":  ["ict_order_block", "volume_momentum", "bollinger_squeeze"],
-    "AVAXUSDT":  ["volume_momentum", "ema_crossover", "bollinger_squeeze"],
-    "DOTUSDT":   ["stoch_rsi_volume", "ema_crossover"],
-    "LINKUSDT":  ["ema_crossover", "volume_momentum", "ichimoku"],
-    "NEARUSDT":  ["volume_momentum", "ichimoku", "bollinger_squeeze"],
-    "INJUSDT":   ["volume_momentum", "ichimoku", "bollinger_squeeze"],
-    "ARBUSDT":   ["ichimoku", "volume_momentum", "support_resistance"],
-    "OPUSDT":    ["support_resistance", "ichimoku", "volume_momentum"],
-    "APTUSDT":   ["volume_momentum", "bollinger_squeeze", "ichimoku"],
-    "ATOMUSDT":  ["volume_momentum", "ichimoku", "ict_order_block"],
-    "MATICUSDT": ["volume_momentum", "bollinger_squeeze", "fibonacci"],
-    "TIAUSDT":   ["volume_momentum", "ichimoku", "bollinger_squeeze"],
-    "LTCUSDT":   ["volume_momentum", "ict_order_block", "bollinger_squeeze"],
-    "UNIUSDT":   ["ema_crossover", "volume_momentum", "support_resistance"],
+    "BTCUSDT":   ["support_resistance", "bollinger_squeeze", "fibonacci",
+                  "ichimoku", "volume_momentum", "vwap_mean_reversion",
+                  "ict_order_block", "stoch_rsi_volume", "ema_crossover", "rsi_macd"],
+    "ETHUSDT":   ["bollinger_squeeze", "volume_momentum", "ichimoku",
+                  "support_resistance", "fibonacci", "ema_crossover",
+                  "vwap_mean_reversion", "stoch_rsi_volume", "ict_order_block", "rsi_macd"],
+    "SOLUSDT":   ["volume_momentum", "ichimoku", "bollinger_squeeze",
+                  "ema_crossover", "support_resistance", "stoch_rsi_volume",
+                  "ict_order_block", "fibonacci", "vwap_mean_reversion", "rsi_macd"],
+    "BNBUSDT":   ["volume_momentum", "ichimoku", "bollinger_squeeze",
+                  "ema_crossover", "support_resistance", "stoch_rsi_volume",
+                  "ict_order_block", "fibonacci", "vwap_mean_reversion", "rsi_macd"],
+    "XRPUSDT":   ["ema_crossover", "ichimoku", "volume_momentum",
+                  "bollinger_squeeze", "support_resistance", "stoch_rsi_volume",
+                  "ict_order_block", "fibonacci", "vwap_mean_reversion", "rsi_macd"],
+    "ADAUSDT":   ["ema_crossover", "volume_momentum", "support_resistance",
+                  "ichimoku", "bollinger_squeeze", "stoch_rsi_volume",
+                  "fibonacci", "ict_order_block", "vwap_mean_reversion", "rsi_macd"],
+    "DOGEUSDT":  ["ict_order_block", "volume_momentum", "bollinger_squeeze",
+                  "ema_crossover", "ichimoku", "support_resistance",
+                  "stoch_rsi_volume", "fibonacci", "vwap_mean_reversion", "rsi_macd"],
+    "AVAXUSDT":  ["volume_momentum", "ema_crossover", "bollinger_squeeze",
+                  "ichimoku", "support_resistance", "stoch_rsi_volume",
+                  "ict_order_block", "fibonacci", "vwap_mean_reversion", "rsi_macd"],
+    "DOTUSDT":   ["stoch_rsi_volume", "ema_crossover", "volume_momentum",
+                  "bollinger_squeeze", "ichimoku", "support_resistance",
+                  "ict_order_block", "fibonacci", "vwap_mean_reversion", "rsi_macd"],
+    "LINKUSDT":  ["ema_crossover", "volume_momentum", "ichimoku",
+                  "bollinger_squeeze", "support_resistance", "stoch_rsi_volume",
+                  "ict_order_block", "fibonacci", "vwap_mean_reversion", "rsi_macd"],
+    "NEARUSDT":  ["volume_momentum", "ichimoku", "bollinger_squeeze",
+                  "ema_crossover", "support_resistance", "stoch_rsi_volume",
+                  "ict_order_block", "fibonacci", "vwap_mean_reversion", "rsi_macd"],
+    "INJUSDT":   ["volume_momentum", "ichimoku", "bollinger_squeeze",
+                  "ema_crossover", "support_resistance", "stoch_rsi_volume",
+                  "ict_order_block", "fibonacci", "vwap_mean_reversion", "rsi_macd"],
+    "ARBUSDT":   ["ichimoku", "volume_momentum", "support_resistance",
+                  "bollinger_squeeze", "ema_crossover", "stoch_rsi_volume",
+                  "ict_order_block", "fibonacci", "vwap_mean_reversion", "rsi_macd"],
+    "OPUSDT":    ["support_resistance", "ichimoku", "volume_momentum",
+                  "bollinger_squeeze", "ema_crossover", "stoch_rsi_volume",
+                  "ict_order_block", "fibonacci", "vwap_mean_reversion", "rsi_macd"],
+    "APTUSDT":   ["volume_momentum", "bollinger_squeeze", "ichimoku",
+                  "ema_crossover", "support_resistance", "stoch_rsi_volume",
+                  "ict_order_block", "fibonacci", "vwap_mean_reversion", "rsi_macd"],
+    "ATOMUSDT":  ["volume_momentum", "ichimoku", "ict_order_block",
+                  "bollinger_squeeze", "ema_crossover", "support_resistance",
+                  "stoch_rsi_volume", "fibonacci", "vwap_mean_reversion", "rsi_macd"],
+    "MATICUSDT": ["volume_momentum", "bollinger_squeeze", "fibonacci",
+                  "ichimoku", "ema_crossover", "support_resistance",
+                  "stoch_rsi_volume", "ict_order_block", "vwap_mean_reversion", "rsi_macd"],
+    "TIAUSDT":   ["volume_momentum", "ichimoku", "bollinger_squeeze",
+                  "ema_crossover", "support_resistance", "stoch_rsi_volume",
+                  "ict_order_block", "fibonacci", "vwap_mean_reversion", "rsi_macd"],
+    "LTCUSDT":   ["volume_momentum", "ict_order_block", "bollinger_squeeze",
+                  "ichimoku", "ema_crossover", "support_resistance",
+                  "stoch_rsi_volume", "fibonacci", "vwap_mean_reversion", "rsi_macd"],
+    "UNIUSDT":   ["ema_crossover", "volume_momentum", "support_resistance",
+                  "ichimoku", "bollinger_squeeze", "stoch_rsi_volume",
+                  "ict_order_block", "fibonacci", "vwap_mean_reversion", "rsi_macd"],
 }
 ALL_COINS = list(COIN_BEST_STRATEGIES.keys())
 
@@ -75,14 +117,15 @@ def _months(years: list[int]):
     return months
 
 
-async def _run_one(coin, start, end, tp, sl, interval, trend, session):
+async def _run_one(coin, start, end, tp, sl, interval, trend, session, top_n=10):
+    strategies = COIN_BEST_STRATEGIES[coin][:top_n]
     req = BacktestRequest(
         coins=[coin],
         start_dt=start,
         end_dt=end,
-        strategies=COIN_BEST_STRATEGIES[coin],
+        strategies=strategies,
         tp_pct=tp,
-        tp2_pct=round(tp * 1.5, 2),
+        tp2_pct=round(tp * 2.0, 2),
         sl_pct=sl,
         interval=interval,
         use_trend_filter=trend,
@@ -111,13 +154,13 @@ def _stat(results):
     return {"trades": wins + losses, "wins": wins, "losses": losses, "pnl": round(pnl, 2)}
 
 
-async def _full_run(job_id, years, tp, sl, interval, trend, session, batch_size):
+async def _full_run(job_id, years, tp, sl, interval, trend, session, batch_size, top_n=10):
     _state.update({"status": "running", "job_id": job_id, "_stop": False,
                    "done": 0, "log": [], "results": {}, "error": None})
 
     months = _months(years)
     _state["total"] = len(ALL_COINS) * len(months)
-    _log(f"Starting {_state['total']} calls ({len(ALL_COINS)} coins x {len(months)} months)")
+    _log(f"Starting {_state['total']} calls ({len(ALL_COINS)} coins x {len(months)} months) | interval={interval} | top {top_n} strategies/coin")
 
     try:
         for start, end, label in months:
@@ -129,7 +172,7 @@ async def _full_run(job_id, years, tp, sl, interval, trend, session, batch_size)
                     break
                 batch = ALL_COINS[i:i + batch_size]
                 _state["current"] = f"{label} — {', '.join(c.replace('USDT','') for c in batch)}"
-                tasks = [_run_one(c, start, end, tp, sl, interval, trend, session) for c in batch]
+                tasks = [_run_one(c, start, end, tp, sl, interval, trend, session, top_n) for c in batch]
                 batch_res = await asyncio.gather(*tasks, return_exceptions=True)
                 for coin, res in zip(batch, batch_res):
                     if isinstance(res, Exception):
@@ -154,13 +197,14 @@ async def _full_run(job_id, years, tp, sl, interval, trend, session, batch_size)
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 class StartRequest(BaseModel):
     years:      list[int]   = [2024, 2025]
-    tp_pct:     float       = 3.0
-    sl_pct:     float       = 1.5
+    tp_pct:     float       = 2.0
+    sl_pct:     float       = 1.0
     interval:   str         = "15m"
     trend:      bool        = True
     session:    bool        = False
     batch_size: int         = 4
     clear_db:   bool        = True
+    top_n:      int         = 10   # use top N strategies per coin (1-10)
 
 
 @router.post("/start")
@@ -180,7 +224,7 @@ async def start(req: StartRequest, bg: BackgroundTasks):
 
     job_id = str(uuid.uuid4())[:8]
     bg.add_task(_full_run, job_id, req.years, req.tp_pct, req.sl_pct,
-                req.interval, req.trend, req.session, req.batch_size)
+                req.interval, req.trend, req.session, req.batch_size, req.top_n)
     return {"job_id": job_id, "status": "starting", "total": len(ALL_COINS) * len(req.years) * 12}
 
 

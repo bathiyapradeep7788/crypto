@@ -5,7 +5,7 @@ import { usePaperTrade } from '@/hooks/usePaperTrade'
 import { useLogStream } from '@/hooks/useLogStream'
 import { COIN_BEST_SETTINGS } from '@/lib/constants'
 
-const API = process.env.NEXT_PUBLIC_API_URL ?? 'https://algobot-backend.vercel.app'
+const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
 
 const TOP_COINS = [
   { coin: 'NEARUSDT', label: 'NEAR', wr: 48.75, pnl: 405.5, color: '#1D9E75' },
@@ -195,6 +195,7 @@ function LiveTab() {
   const { logs } = useLogStream()
   const [selectedCoin, setSelectedCoin] = useState<string | null>(null)
   const [isStarting,   setIsStarting]   = useState(false)
+  const [thinkLoading, setThinkLoading] = useState(false)
   const prevTradesLen = useRef(0)
   const [flashTrade,   setFlashTrade]   = useState(false)
 
@@ -219,6 +220,15 @@ function LiveTab() {
     }
     prevTradesLen.current = closedTrades.length
   }, [closedTrades.length])
+
+  const handleThink = async () => {
+    if (!session) return
+    setThinkLoading(true)
+    try {
+      await fetch(`${API}/paper-trade/think/${session.session_id ?? (session as any).id}`, { method: 'POST' })
+    } catch {}
+    setThinkLoading(false)
+  }
 
   const handleStart = async (coin: string) => {
     setSelectedCoin(coin)
@@ -425,6 +435,13 @@ function LiveTab() {
                   <div className="flex items-center gap-2">
                     <span className="w-2.5 h-2.5 bg-green-400 rounded-full animate-pulse" />
                     <span className="text-sm text-green-400 font-bold">OPEN</span>
+                    <button
+                      onClick={handleThink}
+                      disabled={thinkLoading}
+                      title="Close now & save as 'Think' for later review"
+                      className="ml-2 text-xs px-3 py-1 bg-yellow-900/30 border border-yellow-700/50 text-yellow-400 hover:bg-yellow-900/50 rounded-lg font-semibold transition-colors disabled:opacity-50">
+                      {thinkLoading ? '…' : '🤔 Think (close early)'}
+                    </button>
                   </div>
                 </div>
 
@@ -556,9 +573,79 @@ function LiveTab() {
   )
 }
 
+// ─── Think Trades Tab ─────────────────────────────────────────────────────────
+function ThinkTab() {
+  const [trades, setTrades] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    const load = async () => {
+      setLoading(true)
+      try {
+        const r = await fetch(`${API}/paper-trade/think-trades`).then(r => r.json())
+        setTrades(r.trades ?? [])
+      } catch {}
+      setLoading(false)
+    }
+    load()
+  }, [])
+
+  if (loading) return <div className="text-center py-20 text-gray-500 text-sm">Loading think trades…</div>
+
+  return (
+    <div className="space-y-4">
+      <div className="bg-yellow-900/10 border border-yellow-700/40 rounded-xl px-4 py-3">
+        <p className="text-yellow-400 text-sm font-semibold">🤔 Think Trades — Manually closed early</p>
+        <p className="text-xs text-gray-500 mt-0.5">These trades were in profit but TP was not hit. Closed manually for review.</p>
+      </div>
+
+      {trades.length === 0 ? (
+        <div className="text-center py-16 text-gray-500 text-sm">No think trades yet. Use the 🤔 button on an open position.</div>
+      ) : (
+        <div className="bg-surface-card border border-surface-border rounded-xl overflow-hidden">
+          <div className="overflow-x-auto max-h-[60vh] overflow-y-auto">
+            <table className="w-full text-xs">
+              <thead className="sticky top-0 bg-surface-card border-b border-surface-border">
+                <tr className="text-gray-500 text-left">
+                  {['Coin','Dir','Entry','Exit Price','PnL%','Profit$','Opened','Closed','Session'].map(h => (
+                    <th key={h} className="px-3 py-2 font-medium whitespace-nowrap">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {trades.map((t: any, i: number) => (
+                  <tr key={i} className="border-b border-surface-border hover:bg-surface-hover">
+                    <td className="px-3 py-2 font-bold text-blue-400">{t.coin}</td>
+                    <td className="px-3 py-2">
+                      <span className={`font-bold ${t.direction === 'long' ? 'text-green-400' : 'text-red-400'}`}>
+                        {t.direction === 'long' ? '▲ L' : '▼ S'}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2 font-mono text-gray-300">{t.entry_price}</td>
+                    <td className="px-3 py-2 font-mono text-yellow-300">{t.exit_price}</td>
+                    <td className={`px-3 py-2 font-mono font-bold ${(t.profit_pct ?? 0) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                      {(t.profit_pct ?? 0) >= 0 ? '+' : ''}{t.profit_pct}%
+                    </td>
+                    <td className={`px-3 py-2 font-mono font-semibold ${(t.profit_usdt ?? 0) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                      {(t.profit_usdt ?? 0) >= 0 ? '+' : ''}${t.profit_usdt}
+                    </td>
+                    <td className="px-3 py-2 text-gray-600">{t.opened_at ? new Date(t.opened_at).toLocaleString() : '—'}</td>
+                    <td className="px-3 py-2 text-gray-600">{t.closed_at ? new Date(t.closed_at).toLocaleString() : '—'}</td>
+                    <td className="px-3 py-2 text-gray-600 font-mono text-[10px]">{t.session_id}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function PaperTradePage() {
-  const [tab, setTab] = useState<'live' | 'history'>('live')
+  const [tab, setTab] = useState<'live' | 'history' | 'think'>('live')
 
   return (
     <div className="min-h-screen bg-surface">
@@ -569,28 +656,30 @@ export default function PaperTradePage() {
             <h1 className="text-lg font-bold text-white">
               Paper Trade
               <span className="ml-2 text-xs font-normal text-gray-500">
-                Real Binance prices · Virtual execution · EMA200 + Session filter ON
+                Real Binance prices · Virtual $100/trade · EMA200 + Session filter ON
               </span>
             </h1>
             <p className="text-xs text-gray-600 mt-0.5">
-              Prove strategy is profitable here before going live with real money
+              Prove strategy profitability before going live with real money
             </p>
           </div>
           <div className="flex bg-surface-card border border-surface-border rounded-lg p-0.5 gap-0.5">
-            <button
-              onClick={() => setTab('live')}
+            <button onClick={() => setTab('live')}
               className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${tab === 'live' ? 'bg-brand text-white' : 'text-gray-500 hover:text-gray-300'}`}>
               Live Session
             </button>
-            <button
-              onClick={() => setTab('history')}
+            <button onClick={() => setTab('history')}
               className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${tab === 'history' ? 'bg-brand text-white' : 'text-gray-500 hover:text-gray-300'}`}>
               DB History
+            </button>
+            <button onClick={() => setTab('think')}
+              className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${tab === 'think' ? 'bg-yellow-600 text-white' : 'text-gray-500 hover:text-gray-300'}`}>
+              🤔 Think Trades
             </button>
           </div>
         </div>
 
-        {tab === 'live' ? <LiveTab /> : <HistoryTab />}
+        {tab === 'live' ? <LiveTab /> : tab === 'history' ? <HistoryTab /> : <ThinkTab />}
       </main>
     </div>
   )
