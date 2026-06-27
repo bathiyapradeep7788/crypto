@@ -6,9 +6,10 @@ import { getJSON } from '@/lib/api'
 const BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
 const TABLES = [
-  { id: 'backtest_results', label: 'Backtest Results', color: 'text-brand' },
-  { id: 'paper_trades',     label: 'Paper Trades',     color: 'text-green-400' },
-  { id: 'live_trades',      label: 'Live Trades',       color: 'text-red-400' },
+  { id: 'backtest_results',    label: 'Backtest Results',   color: 'text-brand'      },
+  { id: 'paper_trades',        label: 'Paper Trades',       color: 'text-green-400'  },
+  { id: 'live_trades',         label: 'Live Trades',        color: 'text-red-400'    },
+  { id: 'paper_trade_sessions',label: 'Paper Sessions',     color: 'text-yellow-400' },
 ]
 
 const COL_LABELS: Record<string, string> = {
@@ -45,16 +46,64 @@ export default function DatabasePage() {
   const [confirm, setConfirm]   = useState<string | null>(null)
   const limit = 50
 
+  // Filters
+  const [fCoin,      setFCoin]      = useState('')
+  const [fStrategy,  setFStrategy]  = useState('')
+  const [fWinLoss,   setFWinLoss]   = useState('')
+  const [fDirection, setFDirection] = useState('')
+  const [fReason,    setFReason]    = useState('')
+  const [fDateFrom,  setFDateFrom]  = useState('')
+  const [fDateTo,    setFDateTo]    = useState('')
+  const [fMinPnl,    setFMinPnl]    = useState('')
+  const [fMaxPnl,    setFMaxPnl]    = useState('')
+  const [fSearch,    setFSearch]    = useState('')
+  const [coinOpts,     setCoinOpts]     = useState<string[]>([])
+  const [strategyOpts, setStrategyOpts] = useState<string[]>([])
+  const [showFilters,  setShowFilters]  = useState(false)
+
+  const qs = (pg: number) => {
+    const p = new URLSearchParams({ limit: String(limit), offset: String(pg * limit) })
+    if (fCoin)      p.set('coin', fCoin)
+    if (fStrategy)  p.set('strategy', fStrategy)
+    if (fWinLoss)   p.set('win_loss', fWinLoss)
+    if (fDirection) p.set('direction', fDirection)
+    if (fReason)    p.set('exit_reason', fReason)
+    if (fDateFrom)  p.set('date_from', fDateFrom)
+    if (fDateTo)    p.set('date_to', fDateTo)
+    if (fMinPnl)    p.set('min_pnl', fMinPnl)
+    if (fMaxPnl)    p.set('max_pnl', fMaxPnl)
+    return p.toString()
+  }
+
+  const activeFiltersCount = [fCoin, fStrategy, fWinLoss, fDirection, fReason, fDateFrom, fDateTo, fMinPnl, fMaxPnl].filter(Boolean).length
+
+  const clearAllFilters = () => {
+    setFCoin(''); setFStrategy(''); setFWinLoss(''); setFDirection('')
+    setFReason(''); setFDateFrom(''); setFDateTo(''); setFMinPnl(''); setFMaxPnl('')
+    setPage(0)
+  }
+
   const loadStats = useCallback(async () => {
     try {
       setStats(await getJSON('/database/stats'))
     } catch {}
   }, [])
 
-  const loadRows = useCallback(async (table: string, pg: number) => {
+  const loadOptions = useCallback(async (table: string) => {
+    try {
+      const [c, s] = await Promise.all([
+        getJSON<{ values: string[] }>(`/database/distinct/${table}/coin`),
+        getJSON<{ values: string[] }>(`/database/distinct/${table}/strategy`),
+      ])
+      setCoinOpts(c.values ?? [])
+      setStrategyOpts(s.values ?? [])
+    } catch { setCoinOpts([]); setStrategyOpts([]) }
+  }, [])
+
+  const loadRows = useCallback(async (table: string, pg: number, query: string) => {
     setLoading(true)
     try {
-      const d = await getJSON<{ rows: any[]; total: number }>(`/database/rows/${table}?limit=${limit}&offset=${pg * limit}`)
+      const d = await getJSON<{ rows: any[]; total: number }>(`/database/rows/${table}?${query}`)
       setRows(d.rows ?? [])
       setTotal(d.total ?? 0)
     } catch { setRows([]) }
@@ -62,11 +111,17 @@ export default function DatabasePage() {
   }, [])
 
   useEffect(() => { loadStats() }, [loadStats])
-  useEffect(() => { setPage(0); loadRows(activeTable, 0) }, [activeTable, loadRows])
+  // Reset filters + reload when switching tables
+  useEffect(() => {
+    setPage(0); clearAllFilters()
+    loadOptions(activeTable)
+  }, [activeTable, loadOptions]) // eslint-disable-line
+  // Reload rows when table, page, or filters change
+  useEffect(() => { loadRows(activeTable, page, qs(page)) }, [activeTable, page, fCoin, fStrategy, fWinLoss, fDirection, fReason, fDateFrom, fDateTo, fMinPnl, fMaxPnl]) // eslint-disable-line
 
   const deleteRow = async (id: string) => {
     await fetch(`${BASE}/database/rows/${activeTable}/${id}`, { method: 'DELETE' })
-    loadRows(activeTable, page)
+    loadRows(activeTable, page, qs(page))
     loadStats()
   }
 
@@ -89,7 +144,7 @@ export default function DatabasePage() {
             <p className="text-xs text-gray-500 mt-0.5">View, filter and delete records from Supabase</p>
           </div>
           <button
-            onClick={() => loadRows(activeTable, page)}
+            onClick={() => loadRows(activeTable, page, qs(page))}
             className="text-xs px-3 py-1.5 bg-surface-card border border-surface-border rounded text-gray-400 hover:text-white transition-colors"
           >
             ↻ Refresh
@@ -115,6 +170,117 @@ export default function DatabasePage() {
           ))}
         </div>
 
+        {/* Filters */}
+        <div className="mb-3 bg-surface-card border border-surface-border rounded-lg overflow-hidden">
+          <div className="flex items-center justify-between px-4 py-2.5">
+            <div className="flex items-center gap-3">
+              <span className="text-xs text-gray-500 font-semibold">Filters</span>
+              {activeFiltersCount > 0 && (
+                <span className="text-[10px] bg-brand/20 text-brand px-2 py-0.5 rounded-full font-semibold">{activeFiltersCount} active</span>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              {activeFiltersCount > 0 && (
+                <button onClick={clearAllFilters} className="text-xs text-gray-400 hover:text-white underline">Clear all</button>
+              )}
+              <button onClick={() => setShowFilters(v => !v)}
+                className="text-xs px-3 py-1 bg-surface border border-surface-border rounded text-gray-400 hover:text-white transition-colors">
+                {showFilters ? 'Hide Filters ▲' : 'Show Filters ▼'}
+              </button>
+            </div>
+          </div>
+
+          {showFilters && (
+            <div className="px-4 pb-4 border-t border-surface-border pt-3 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+              {/* Coin */}
+              <div>
+                <label className="block text-[10px] text-gray-500 mb-1 uppercase tracking-wider">Coin</label>
+                <select value={fCoin} onChange={e => { setFCoin(e.target.value); setPage(0) }}
+                  className="w-full bg-surface border border-surface-border rounded px-2 py-1.5 text-xs text-white focus:outline-none focus:border-brand">
+                  <option value="">All</option>
+                  {coinOpts.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </div>
+
+              {/* Strategy */}
+              <div>
+                <label className="block text-[10px] text-gray-500 mb-1 uppercase tracking-wider">Strategy</label>
+                <select value={fStrategy} onChange={e => { setFStrategy(e.target.value); setPage(0) }}
+                  className="w-full bg-surface border border-surface-border rounded px-2 py-1.5 text-xs text-white focus:outline-none focus:border-brand">
+                  <option value="">All</option>
+                  {strategyOpts.map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </div>
+
+              {/* Direction */}
+              <div>
+                <label className="block text-[10px] text-gray-500 mb-1 uppercase tracking-wider">Direction</label>
+                <select value={fDirection} onChange={e => { setFDirection(e.target.value); setPage(0) }}
+                  className="w-full bg-surface border border-surface-border rounded px-2 py-1.5 text-xs text-white focus:outline-none focus:border-brand">
+                  <option value="">All</option>
+                  <option value="long">Long</option>
+                  <option value="short">Short</option>
+                </select>
+              </div>
+
+              {/* Win/Loss */}
+              <div>
+                <label className="block text-[10px] text-gray-500 mb-1 uppercase tracking-wider">Result</label>
+                <select value={fWinLoss} onChange={e => { setFWinLoss(e.target.value); setPage(0) }}
+                  className="w-full bg-surface border border-surface-border rounded px-2 py-1.5 text-xs text-white focus:outline-none focus:border-brand">
+                  <option value="">All</option>
+                  <option value="Win">Win</option>
+                  <option value="Loss">Loss</option>
+                </select>
+              </div>
+
+              {/* Exit reason */}
+              <div>
+                <label className="block text-[10px] text-gray-500 mb-1 uppercase tracking-wider">Exit Reason</label>
+                <select value={fReason} onChange={e => { setFReason(e.target.value); setPage(0) }}
+                  className="w-full bg-surface border border-surface-border rounded px-2 py-1.5 text-xs text-white focus:outline-none focus:border-brand">
+                  <option value="">All</option>
+                  <option value="Hit TP1">Hit TP1</option>
+                  <option value="Hit TP2">Hit TP2</option>
+                  <option value="Hit SL">Hit SL</option>
+                  <option value="Think">Think</option>
+                  <option value="Expired">Expired</option>
+                </select>
+              </div>
+
+              {/* Date from */}
+              <div>
+                <label className="block text-[10px] text-gray-500 mb-1 uppercase tracking-wider">Date From</label>
+                <input type="date" value={fDateFrom} onChange={e => { setFDateFrom(e.target.value); setPage(0) }}
+                  className="w-full bg-surface border border-surface-border rounded px-2 py-1.5 text-xs text-white focus:outline-none focus:border-brand" />
+              </div>
+
+              {/* Date to */}
+              <div>
+                <label className="block text-[10px] text-gray-500 mb-1 uppercase tracking-wider">Date To</label>
+                <input type="date" value={fDateTo} onChange={e => { setFDateTo(e.target.value); setPage(0) }}
+                  className="w-full bg-surface border border-surface-border rounded px-2 py-1.5 text-xs text-white focus:outline-none focus:border-brand" />
+              </div>
+
+              {/* Min PnL */}
+              <div>
+                <label className="block text-[10px] text-gray-500 mb-1 uppercase tracking-wider">Min PnL %</label>
+                <input type="number" step="0.1" placeholder="-10" value={fMinPnl}
+                  onChange={e => { setFMinPnl(e.target.value); setPage(0) }}
+                  className="w-full bg-surface border border-surface-border rounded px-2 py-1.5 text-xs text-white focus:outline-none focus:border-brand" />
+              </div>
+
+              {/* Max PnL */}
+              <div>
+                <label className="block text-[10px] text-gray-500 mb-1 uppercase tracking-wider">Max PnL %</label>
+                <input type="number" step="0.1" placeholder="10" value={fMaxPnl}
+                  onChange={e => { setFMaxPnl(e.target.value); setPage(0) }}
+                  className="w-full bg-surface border border-surface-border rounded px-2 py-1.5 text-xs text-white focus:outline-none focus:border-brand" />
+              </div>
+            </div>
+          )}
+        </div>
+
         {/* Table actions */}
         <div className="flex items-center justify-between mb-3">
           <p className="text-sm text-gray-400">
@@ -123,7 +289,7 @@ export default function DatabasePage() {
           <div className="flex gap-2">
             <button
               disabled={page === 0}
-              onClick={() => { const p = page - 1; setPage(p); loadRows(activeTable, p) }}
+              onClick={() => setPage(page - 1)}
               className="text-xs px-3 py-1.5 bg-surface-card border border-surface-border rounded text-gray-400 hover:text-white disabled:opacity-30 transition-colors"
             >
               ← Prev
@@ -131,7 +297,7 @@ export default function DatabasePage() {
             <span className="text-xs text-gray-500 px-2 py-1.5">Page {page + 1} / {Math.ceil(total / limit) || 1}</span>
             <button
               disabled={(page + 1) * limit >= total}
-              onClick={() => { const p = page + 1; setPage(p); loadRows(activeTable, p) }}
+              onClick={() => setPage(page + 1)}
               className="text-xs px-3 py-1.5 bg-surface-card border border-surface-border rounded text-gray-400 hover:text-white disabled:opacity-30 transition-colors"
             >
               Next →

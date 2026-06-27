@@ -1,11 +1,11 @@
-import { BacktestConfig, JobStatus, TradeSessionConfig, TradingSession, CombinedStrategy, LogEntry } from '@/types'
+import { BacktestConfig, JobStatus, TradeSessionConfig, TradingSession, CombinedStrategy, LogEntry, TradeResult } from '@/types'
 
 const BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
-// Serverless cold starts (~12s) make the first request after idle 503/time out.
-// Retry GETs a few times with a short backoff so a cold start doesn't surface
-// as an error in the UI.
-export async function getJSON<T>(path: string, retries = 3): Promise<T> {
+// Serverless cold starts (~13s on Vercel free tier) make the first request
+// after idle return 503. Retry GETs with backoff long enough to outlast a cold
+// start (≈15s) so it never surfaces as an error in the UI.
+export async function getJSON<T>(path: string, retries = 6, delayMs = 2500): Promise<T> {
   let lastErr: any
   for (let i = 0; i <= retries; i++) {
     try {
@@ -17,21 +17,47 @@ export async function getJSON<T>(path: string, retries = 3): Promise<T> {
       return res.json()
     } catch (e) {
       lastErr = e
-      if (i < retries) await new Promise(r => setTimeout(r, 1500))
+      if (i < retries) await new Promise(r => setTimeout(r, delayMs))
     }
   }
   throw lastErr
 }
 
 // ── Backtest ──────────────────────────────────────────────────
-export async function startBacktest(config: BacktestConfig): Promise<{ job_id: string }> {
-  const res = await fetch(`${BASE}/backtest/run`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(config),
-  })
-  if (!res.ok) throw new Error(`API error: ${res.status}`)
-  return res.json()
+// Runs synchronously on the backend and returns results in the response.
+// Retries on cold-start 503; allows a long timeout for the computation.
+export async function runBacktest(config: BacktestConfig, retries = 3, externalSignal?: AbortSignal): Promise<{ results: TradeResult[] }> {
+  let lastErr: any
+  for (let i = 0; i <= retries; i++) {
+    if (externalSignal?.aborted) throw new DOMException('stopped', 'AbortError')
+    const ctrl = new AbortController()
+    const onAbort = () => ctrl.abort()
+    externalSignal?.addEventListener('abort', onAbort)
+    const t = setTimeout(() => ctrl.abort(), 110000)
+    try {
+      const res = await fetch(`${BASE}/backtest/run`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(config),
+        signal: ctrl.signal,
+      })
+      if (res.status === 503 || res.status === 502 || res.status === 504) {
+        throw new Error(`warming up (${res.status})`)
+      }
+      if (!res.ok) throw new Error(`API error: ${res.status}`)
+      return res.json()
+    } catch (e: any) {
+      // Only the external stop signal should halt the whole backtest.
+      // An internal timeout (ctrl.abort) counts as a regular failure → retry.
+      if (externalSignal?.aborted) throw new DOMException('stopped', 'AbortError')
+      lastErr = e
+      if (i < retries) await new Promise(r => setTimeout(r, 2500))
+    } finally {
+      clearTimeout(t)
+      externalSignal?.removeEventListener('abort', onAbort)
+    }
+  }
+  throw lastErr
 }
 
 export async function getJobStatus(jobId: string): Promise<JobStatus> {
@@ -53,7 +79,7 @@ export async function listCombined(): Promise<CombinedStrategy[]> {
 }
 
 export async function createCombined(payload: {
-  name: string; strategy_a: string; strategy_b: string; params?: Record<string, number>
+  name: string; members: string[]; params?: Record<string, number>
 }): Promise<CombinedStrategy> {
   const res = await fetch(`${BASE}/strategies/combined`, {
     method: 'POST',
@@ -66,7 +92,7 @@ export async function createCombined(payload: {
 
 export async function updateCombined(
   id: string,
-  payload: Partial<{ name: string; strategy_a: string; strategy_b: string; params: Record<string, number> }>
+  payload: Partial<{ name: string; members: string[]; params: Record<string, number> }>
 ): Promise<CombinedStrategy> {
   const res = await fetch(`${BASE}/strategies/combined/${id}`, {
     method: 'PUT',
@@ -79,6 +105,26 @@ export async function updateCombined(
 
 export async function deleteCombined(id: string): Promise<void> {
   await fetch(`${BASE}/strategies/combined/${id}`, { method: 'DELETE' })
+}
+
+// ── Reports ───────────────────────────────────────────────────
+export async function getReportCoins(): Promise<string[]> {
+  try {
+    const d = await getJSON<{ coins: string[] }>('/reports/coins')
+    return d.coins ?? []
+  } catch { return [] }
+}
+
+export async function getCoinReport(coin: string): Promise<any> {
+  return getJSON(`/reports/coin/${coin}`)
+}
+
+export async function getAllCoinsSummary(minTrades = 10): Promise<any> {
+  return getJSON(`/reports/all-coins?min_trades=${minTrades}`)
+}
+
+export function coinReportTextUrl(coin: string): string {
+  return `${BASE}/reports/coin/${coin}/text`
 }
 
 // ── Paper Trade ───────────────────────────────────────────────

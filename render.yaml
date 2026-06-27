@@ -13,6 +13,8 @@ services:
         sync: false
       - key: BINANCE_BASE_URL
         value: https://api.binance.com
+      - key: BINANCE_DATA_URL
+        value: https://data-api.binance.vision
       - key: BINANCE_DEMO_URL
         value: https://testnet.binance.vision
       - key: BINANCE_API_KEY

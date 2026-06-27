@@ -10,11 +10,7 @@ class BacktestRequest(BaseModel):
     coins: List[str]
     start_dt: datetime
     end_dt: datetime
-    # New multi-select field: run several strategies in one job.
-    # Each entry is either a built-in strategy id (e.g. "rsi_macd")
-    # or a combined-strategy id prefixed with "combo_<uuid>".
     strategies: List[str] = []
-    # Legacy single-strategy fields (kept for backward compatibility).
     strategy_primary: Optional[str] = None
     strategy_secondary: Optional[str] = None
     params: List[StrategyParam] = []
@@ -23,9 +19,23 @@ class BacktestRequest(BaseModel):
     sl_pct: float = 1.5
     interval: str = "1h"
 
+    # ── Smart Filters ──────────────────────────────────────────
+    # Trend filter: only allow signals aligned with EMA(period) direction
+    use_trend_filter: bool = False
+    trend_ema_period: int = 200
+
+    # Session filter: only trade during UTC 08:00-20:00 (London+NY overlap)
+    use_session_filter: bool = False
+
+    # ATR-based TP/SL: overrides fixed % when enabled
+    use_atr_tp_sl: bool = False
+    atr_tp_mult: float = 2.0
+    atr_sl_mult: float = 1.0
+
+    # Voting / confluence: require N strategies to agree (1 = no voting, use normal mode)
+    min_confluence: int = 1
+
     def resolved_strategies(self) -> List[str]:
-        """Return the list of strategy ids to run, supporting both the new
-        `strategies` list and the legacy `strategy_primary` field."""
         if self.strategies:
             return self.strategies
         if self.strategy_primary:

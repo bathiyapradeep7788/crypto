@@ -3,14 +3,19 @@ import { useEffect, useRef, useState } from 'react'
 import { LogEntry } from '@/types'
 import { getRecentLogs } from '@/lib/api'
 
-// Polls /logs/recent every 2s. Replaces the old SSE EventSource, which kept
-// erroring + reconnecting on Vercel serverless (no long-lived connections).
+// Polls /logs/recent on a SEQUENTIAL schedule: the next poll is only scheduled
+// after the current one settles. This prevents request pile-up — overlapping
+// polls were spawning many concurrent cold-start requests and tripping the
+// Vercel free-tier concurrency limit (503 storm). Replaces the old SSE stream.
+const POLL_MS = 4000
+
 export function useLogStream() {
   const [logs, setLogs] = useState<LogEntry[]>([])
   const lastIdRef = useRef(0)
 
   useEffect(() => {
     let alive = true
+    let timer: ReturnType<typeof setTimeout>
 
     const tick = async () => {
       try {
@@ -18,17 +23,17 @@ export function useLogStream() {
         if (!alive) return
         if (data.logs.length > 0) {
           lastIdRef.current = data.last_id
-          // newest first, capped at 500
           setLogs(prev => [...data.logs.slice().reverse(), ...prev].slice(0, 500))
         }
       } catch {
         // ignore — next tick retries
+      } finally {
+        if (alive) timer = setTimeout(tick, POLL_MS)
       }
     }
 
     tick()
-    const id = setInterval(tick, 2000)
-    return () => { alive = false; clearInterval(id) }
+    return () => { alive = false; clearTimeout(timer) }
   }, [])
 
   const clear = () => { setLogs([]) }

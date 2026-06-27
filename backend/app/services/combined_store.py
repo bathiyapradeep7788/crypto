@@ -1,9 +1,11 @@
 """
 CRUD helpers for user-defined combined strategies stored in Supabase.
 
-A combined strategy joins two built-in strategies with AND logic — a signal
-fires only when BOTH underlying strategies agree on the same direction.
+A combined strategy joins TWO OR MORE built-in strategies with AND logic — a
+signal fires only when ALL member strategies agree on the same direction.
 Combined strategies are referenced elsewhere by the id form "combo_<uuid>".
+The member list lives in `members` (jsonb array); strategy_a/strategy_b are
+kept populated from the first two members for backward compatibility.
 """
 from typing import List, Dict, Optional
 from app.config import settings
@@ -19,6 +21,14 @@ def _client():
     return create_client(settings.supabase_url, settings.supabase_key)
 
 
+def members_of(combo: dict) -> List[str]:
+    """Return the member strategy ids, tolerating old rows that only have a/b."""
+    m = combo.get("members") or []
+    if m:
+        return m
+    return [s for s in (combo.get("strategy_a"), combo.get("strategy_b")) if s]
+
+
 def list_combined() -> List[dict]:
     client = _client()
     if not client:
@@ -30,15 +40,16 @@ def list_combined() -> List[dict]:
     return rows
 
 
-def create_combined(name: str, strategy_a: str, strategy_b: str,
+def create_combined(name: str, members: List[str],
                     params: Optional[dict] = None) -> dict:
     client = _client()
     if not client:
         raise RuntimeError("Supabase not configured")
     data = {
         "name": name,
-        "strategy_a": strategy_a,
-        "strategy_b": strategy_b,
+        "members": members,
+        "strategy_a": members[0] if len(members) > 0 else None,
+        "strategy_b": members[1] if len(members) > 1 else None,
         "logic": "AND",
         "params": params or {},
     }
@@ -53,7 +64,11 @@ def update_combined(combo_id: str, fields: dict) -> dict:
     if not client:
         raise RuntimeError("Supabase not configured")
     allowed = {k: v for k, v in fields.items()
-               if k in {"name", "strategy_a", "strategy_b", "params"}}
+               if k in {"name", "members", "params"}}
+    if "members" in allowed:
+        m = allowed["members"]
+        allowed["strategy_a"] = m[0] if len(m) > 0 else None
+        allowed["strategy_b"] = m[1] if len(m) > 1 else None
     res = client.table("combined_strategies").update(allowed).eq("id", combo_id).execute()
     row = res.data[0]
     _cache[row["id"]] = row

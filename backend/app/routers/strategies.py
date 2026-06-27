@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from typing import Optional, Dict
+from typing import Optional, Dict, List
 from app.services import combined_store
 
 router = APIRouter()
@@ -8,15 +8,13 @@ router = APIRouter()
 
 class CombinedCreate(BaseModel):
     name: str
-    strategy_a: str
-    strategy_b: str
+    members: List[str]
     params: Optional[Dict[str, float]] = None
 
 
 class CombinedUpdate(BaseModel):
     name: Optional[str] = None
-    strategy_a: Optional[str] = None
-    strategy_b: Optional[str] = None
+    members: Optional[List[str]] = None
     params: Optional[Dict[str, float]] = None
 
 
@@ -27,12 +25,11 @@ async def list_combined():
 
 @router.post("/combined")
 async def create_combined(req: CombinedCreate):
-    if req.strategy_a == req.strategy_b:
-        raise HTTPException(status_code=400, detail="Pick two different strategies")
+    members = list(dict.fromkeys(req.members))  # dedupe, keep order
+    if len(members) < 2:
+        raise HTTPException(status_code=400, detail="Pick at least two different strategies")
     try:
-        return combined_store.create_combined(
-            req.name, req.strategy_a, req.strategy_b, req.params
-        )
+        return combined_store.create_combined(req.name, members, req.params)
     except RuntimeError as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -40,6 +37,10 @@ async def create_combined(req: CombinedCreate):
 @router.put("/combined/{combo_id}")
 async def update_combined(combo_id: str, req: CombinedUpdate):
     fields = {k: v for k, v in req.dict().items() if v is not None}
+    if "members" in fields:
+        fields["members"] = list(dict.fromkeys(fields["members"]))
+        if len(fields["members"]) < 2:
+            raise HTTPException(status_code=400, detail="Pick at least two different strategies")
     if not fields:
         raise HTTPException(status_code=400, detail="Nothing to update")
     try:

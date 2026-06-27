@@ -13,11 +13,20 @@ export interface BacktestConfig {
   tp2_pct: number
   sl_pct: number
   interval: string
+  // Smart Filters
+  use_trend_filter?: boolean
+  trend_ema_period?: number
+  use_session_filter?: boolean
+  use_atr_tp_sl?: boolean
+  atr_tp_mult?: number
+  atr_sl_mult?: number
+  min_confluence?: number
 }
 
 export interface CombinedStrategy {
   id: string
   name: string
+  members: string[]
   strategy_a: string
   strategy_b: string
   logic: string
@@ -58,6 +67,7 @@ export interface TradeSessionConfig {
   coin: string
   strategy_primary: string
   strategy_secondary?: string
+  strategies?: string[]
   interval: string
   tp_pct: number
   tp2_pct: number
@@ -65,6 +75,11 @@ export interface TradeSessionConfig {
   trade_usdt: number
   virtual_balance?: number
   ai_min_confidence: number
+  use_trend_filter?: boolean
+  trend_ema_period?: number
+  use_session_filter?: boolean
+  min_confluence?: number
+  position_pct?: number
 }
 
 export interface OpenPosition {
