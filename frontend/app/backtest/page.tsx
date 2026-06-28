@@ -46,9 +46,10 @@ export default function BacktestPage() {
   const [bestTpPct,    setBestTpPct]    = useState(2.0)
   const [bestTp2Pct,   setBestTp2Pct]  = useState(4.0)
   const [bestSlPct,    setBestSlPct]    = useState(1.5)
-  const [bestLoading,  setBestLoading]  = useState(false)
-  const [bestResults,  setBestResults]  = useState<BestResult[]>([])
-  const [expandedCoin, setExpandedCoin] = useState<string | null>(null)
+  const [bestLoading,   setBestLoading]   = useState(false)
+  const [bestResults,   setBestResults]   = useState<BestResult[]>([])
+  const [bestProgress,  setBestProgress]  = useState({ done: 0, total: 0 })
+  const [expandedCoin,  setExpandedCoin]  = useState<string | null>(null)
 
   const soloBuiltIn =
     strategies.length === 1 && !strategies[0].startsWith('combo_') ? strategies[0] : null
@@ -73,17 +74,24 @@ export default function BacktestPage() {
     if (!coinsToRun.length) { addToast('Select at least one coin', 'warning'); return }
     setBestLoading(true)
     setBestResults([])
+    setBestProgress({ done: 0, total: coinsToRun.length })
     try {
       const data = await getBestPerCoin({
-        coins: coinsToRun.join(','),
+        coins:    coinsToRun,
         start_dt: new Date(bestStartDt).toISOString(),
         end_dt:   new Date(bestEndDt).toISOString(),
         interval: bestInterval,
         tp_pct:   bestTpPct,
         tp2_pct:  bestTp2Pct,
         sl_pct:   bestSlPct,
+        onProgress: (done, total, result) => {
+          setBestProgress({ done, total })
+          setBestResults(prev => [...prev, result])
+        },
       })
-      setBestResults(data.results ?? [])
+      if (data.results.some((r: any) => r.error)) {
+        addToast('Some coins had errors — check results', 'warning')
+      }
     } catch (e: any) { addToast(`Best-strategy error: ${e.message}`, 'error') }
     setBestLoading(false)
   }
@@ -238,8 +246,16 @@ export default function BacktestPage() {
 
             {/* Best results table */}
             {bestLoading && (
-              <div className="bg-surface-card border border-surface-border rounded-lg p-8 text-center">
-                <div className="text-brand animate-pulse text-sm">Running all 10 strategies across {bestCoins.length} coins… this may take a minute.</div>
+              <div className="bg-surface-card border border-surface-border rounded-lg p-6">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm text-gray-300">Running 10 strategies per coin…</span>
+                  <span className="text-sm font-semibold text-brand">{bestProgress.done} / {bestProgress.total} coins</span>
+                </div>
+                <div className="w-full bg-surface rounded-full h-2">
+                  <div className="bg-brand h-2 rounded-full transition-all duration-300"
+                    style={{ width: bestProgress.total ? `${bestProgress.done / bestProgress.total * 100}%` : '0%' }} />
+                </div>
+                <p className="text-xs text-gray-600 mt-2">Each coin runs sequentially to avoid timeout. Please wait…</p>
               </div>
             )}
 

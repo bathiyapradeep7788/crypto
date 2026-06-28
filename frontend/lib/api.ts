@@ -139,26 +139,38 @@ export async function getAllLiveSessions(): Promise<TradingSession[]> {
   }
 }
 
-// ── Best-per-coin (backtest) ──────────────────────────────────
+// ── Best-per-coin (backtest) — one coin per request to avoid serverless timeout ──
 export async function getBestPerCoin(params: {
-  coins: string
+  coins: string[]
   start_dt: string
   end_dt: string
   interval?: string
   tp_pct?: number
   tp2_pct?: number
   sl_pct?: number
+  onProgress?: (done: number, total: number, result: any) => void
 }): Promise<{ results: any[] }> {
-  const qs = new URLSearchParams({
-    coins:    params.coins,
+  const results: any[] = []
+  const base = {
     start_dt: params.start_dt,
     end_dt:   params.end_dt,
     interval: params.interval ?? '15m',
     tp_pct:   String(params.tp_pct ?? 2.0),
     tp2_pct:  String(params.tp2_pct ?? 4.0),
     sl_pct:   String(params.sl_pct ?? 1.5),
-  })
-  return getJSON(`/backtest/best-per-coin?${qs}`)
+  }
+  for (let i = 0; i < params.coins.length; i++) {
+    const coin = params.coins[i]
+    const qs = new URLSearchParams({ coin, ...base })
+    try {
+      const r = await getJSON<any>(`/backtest/best-per-coin?${qs}`, 2)
+      results.push(r)
+    } catch (e: any) {
+      results.push({ coin, error: e.message, best_strategy: null, win_rate: 0, total_pnl_pct: 0, total_trades: 0, all_strategies: [] })
+    }
+    params.onProgress?.(i + 1, params.coins.length, results[results.length - 1])
+  }
+  return { results }
 }
 
 // ── Monitor ───────────────────────────────────────────────────
