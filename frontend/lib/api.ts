@@ -138,3 +138,77 @@ export async function getAllLiveSessions(): Promise<TradingSession[]> {
     return []
   }
 }
+
+// ── Best-per-coin (backtest) ──────────────────────────────────
+export async function getBestPerCoin(params: {
+  coins: string
+  start_dt: string
+  end_dt: string
+  interval?: string
+  tp_pct?: number
+  tp2_pct?: number
+  sl_pct?: number
+}): Promise<{ results: any[] }> {
+  const qs = new URLSearchParams({
+    coins:    params.coins,
+    start_dt: params.start_dt,
+    end_dt:   params.end_dt,
+    interval: params.interval ?? '15m',
+    tp_pct:   String(params.tp_pct ?? 2.0),
+    tp2_pct:  String(params.tp2_pct ?? 4.0),
+    sl_pct:   String(params.sl_pct ?? 1.5),
+  })
+  return getJSON(`/backtest/best-per-coin?${qs}`)
+}
+
+// ── Monitor ───────────────────────────────────────────────────
+export interface MonitorConfig {
+  coins: string[]
+  interval: string
+  strategy: string
+  tp_pct: number
+  tp2_pct: number
+  sl_pct: number
+  trade_usdt: number
+  ai_min_confidence: number
+}
+
+export async function checkMonitor(mode: 'paper' | 'live', config: MonitorConfig): Promise<any> {
+  const res = await fetch(`${BASE}/${mode === 'paper' ? 'paper-trade' : 'live-trade'}/monitor/check`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(config),
+  })
+  if (!res.ok) throw new Error(`API error: ${res.status}`)
+  return res.json()
+}
+
+export async function getMonitorPositions(mode: 'paper' | 'live'): Promise<{ positions: any[] }> {
+  return getJSON(`/${mode === 'paper' ? 'paper-trade' : 'live-trade'}/monitor/positions`)
+}
+
+export async function getMonitorTrades(mode: 'paper' | 'live'): Promise<{ trades: any[] }> {
+  return getJSON(`/${mode === 'paper' ? 'paper-trade' : 'live-trade'}/monitor/trades`)
+}
+
+export async function closeMonitorPosition(mode: 'paper' | 'live', id: string): Promise<any> {
+  const res = await fetch(`${BASE}/${mode === 'paper' ? 'paper-trade' : 'live-trade'}/monitor/close/${id}`, {
+    method: 'POST',
+  })
+  if (!res.ok) throw new Error(`API error: ${res.status}`)
+  return res.json()
+}
+
+export async function thinkMonitorPosition(mode: 'paper' | 'live', id: string): Promise<any> {
+  const res = await fetch(`${BASE}/${mode === 'paper' ? 'paper-trade' : 'live-trade'}/monitor/think/${id}`, {
+    method: 'POST',
+  })
+  if (!res.ok) throw new Error(`API error: ${res.status}`)
+  return res.json()
+}
+
+// ── Report ────────────────────────────────────────────────────
+export async function getReport(coin: string, start_dt: string, end_dt: string): Promise<any> {
+  const qs = new URLSearchParams({ coin, start_dt, end_dt })
+  return getJSON(`/report/coin?${qs}`)
+}

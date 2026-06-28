@@ -25,6 +25,19 @@ export const INTERVALS = [
   { value: '1d',  label: '1 Day' },
 ]
 
+export const STRATEGY_LABELS: Record<string, string> = {
+  rsi_macd:            'RSI + MACD',
+  ema_crossover:       'EMA 21/55 Crossover',
+  bollinger_squeeze:   'Bollinger Band Squeeze',
+  vwap_mean_reversion: 'VWAP Mean Reversion',
+  support_resistance:  'S/R Bounce',
+  ichimoku:            'Ichimoku Cloud',
+  stoch_rsi_volume:    'Stoch RSI + Volume',
+  ict_order_block:     'ICT Order Block + FVG',
+  fibonacci:           'Fibonacci Retracement',
+  volume_momentum:     'Volume-Momentum Breakout',
+}
+
 export const DEFAULT_PARAMS: Record<string, { key: string; label: string; default: number }[]> = {
   rsi_macd: [
     { key: 'rsi_period',     label: 'RSI Period',     default: 14 },

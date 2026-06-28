@@ -3,12 +3,12 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 
 const TABS = [
-  { href: '/backtest',     label: 'Backtest Bot'      },
-  { href: '/paper-trade',  label: 'Paper Trade'        },
-  { href: '/live-trade',   label: 'Live Actual Trade'  },
-  { href: '/database',     label: 'Database'           },
-  { href: '/render-logs',  label: 'Render Logs'        },
-  { href: '/logs',         label: 'System Logs'        },
+  { href: '/backtest',    label: 'Backtest Bot'     },
+  { href: '/paper-trade', label: 'Paper Trade'       },
+  { href: '/live-trade',  label: 'Live Actual Trade' },
+  { href: '/database',    label: 'Database'          },
+  { href: '/logs',        label: 'System Logs'       },
+  { href: '/report',      label: 'Report'            },
 ]
 
 export default function TabBar() {

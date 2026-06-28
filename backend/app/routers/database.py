@@ -4,7 +4,7 @@ from app.config import settings
 
 router = APIRouter()
 
-ALLOWED_TABLES = {"backtest_results", "paper_trades", "live_trades"}
+ALLOWED_TABLES = {"backtest_results", "paper_trades", "live_trades", "monitor_positions", "monitor_trades"}
 
 
 def _get_client():
@@ -19,12 +19,19 @@ async def get_rows(
     table: str,
     limit: int = Query(default=100, le=500),
     offset: int = Query(default=0),
+    filter_col: Optional[str] = Query(default=None),
+    filter_val: Optional[str] = Query(default=None),
 ):
     if table not in ALLOWED_TABLES:
         raise HTTPException(status_code=400, detail="Invalid table")
     client = _get_client()
-    res = client.table(table).select("*").order("created_at", desc=True).range(offset, offset + limit - 1).execute()
-    count_res = client.table(table).select("id", count="exact").execute()
+    query = client.table(table).select("*").order("created_at", desc=True)
+    count_query = client.table(table).select("id", count="exact")
+    if filter_col and filter_val is not None:
+        query = query.eq(filter_col, filter_val)
+        count_query = count_query.eq(filter_col, filter_val)
+    res = query.range(offset, offset + limit - 1).execute()
+    count_res = count_query.execute()
     return {"rows": res.data, "total": count_res.count}
 
 
