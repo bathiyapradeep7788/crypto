@@ -94,3 +94,35 @@ do $$ begin
     create policy service_all on live_trades for all using (true) with check (true);
   end if;
 end $$;
+
+
+-- 5. Per-coin optimization results (best strategy + optimized TP/SL per coin)
+create table if not exists coin_best_strategies (
+  id              uuid primary key default gen_random_uuid(),
+  coin            text not null,
+  strategy_id     text not null,
+  strategy_label  text,
+  tp_pct          numeric,
+  tp2_pct         numeric,
+  sl_pct          numeric,
+  win_rate        numeric,
+  total_pnl_pct   numeric,
+  total_trades    integer,
+  start_dt        text,
+  end_dt          text,
+  interval        text,
+  all_strategies  jsonb,
+  created_at      timestamptz default now(),
+  updated_at      timestamptz default now()
+);
+
+create unique index if not exists idx_coin_best_strategies_coin
+  on coin_best_strategies (coin);
+
+alter table coin_best_strategies enable row level security;
+
+do $$ begin
+  if not exists (select 1 from pg_policies where tablename='coin_best_strategies' and policyname='service_all') then
+    create policy service_all on coin_best_strategies for all using (true) with check (true);
+  end if;
+end $$;

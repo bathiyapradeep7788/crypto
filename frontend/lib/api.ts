@@ -224,3 +224,53 @@ export async function getReport(coin: string, start_dt: string, end_dt: string):
   const qs = new URLSearchParams({ coin, start_dt, end_dt })
   return getJSON(`/report/coin?${qs}`)
 }
+
+// ── Strategy Optimisation per coin ───────────────────────────
+export type OptimizeResult = {
+  coin: string
+  best_strategy: string | null
+  best_strategy_label: string | null
+  optimized_params: { tp_pct: number; tp2_pct: number; sl_pct: number }
+  win_rate: number
+  total_pnl_pct: number
+  total_trades: number
+  all_strategies: { strategy: string; strategy_label: string; win_rate: number; total_pnl_pct: number; total_trades: number }[]
+  error?: string
+}
+
+export async function optimizeAllCoins(params: {
+  coins: string[]
+  start_dt: string
+  end_dt: string
+  interval?: string
+  save?: boolean
+  onProgress?: (done: number, total: number, result: OptimizeResult) => void
+}): Promise<{ results: OptimizeResult[] }> {
+  const results: OptimizeResult[] = []
+  const base = {
+    start_dt: params.start_dt,
+    end_dt:   params.end_dt,
+    interval: params.interval ?? '15m',
+    save:     String(params.save ?? false),
+  }
+  for (let i = 0; i < params.coins.length; i++) {
+    const coin = params.coins[i]
+    const qs = new URLSearchParams({ coin, ...base })
+    try {
+      const r = await getJSON<OptimizeResult>(`/backtest/optimize-coin?${qs}`, 2)
+      results.push(r)
+    } catch (e: any) {
+      results.push({
+        coin, error: e.message, best_strategy: null, best_strategy_label: null,
+        optimized_params: { tp_pct: 2, tp2_pct: 4, sl_pct: 1.5 },
+        win_rate: 0, total_pnl_pct: 0, total_trades: 0, all_strategies: [],
+      })
+    }
+    params.onProgress?.(i + 1, params.coins.length, results[results.length - 1])
+  }
+  return { results }
+}
+
+export async function getDashboard(): Promise<{ rows: any[] }> {
+  return getJSON('/backtest/dashboard')
+}

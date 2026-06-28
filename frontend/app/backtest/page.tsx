@@ -6,7 +6,7 @@ import StrategySelector from '@/components/backtest/StrategySelector'
 import StrategyParams from '@/components/backtest/StrategyParams'
 import ResultsTable from '@/components/backtest/ResultsTable'
 import { useBacktest } from '@/hooks/useBacktest'
-import { getBestPerCoin } from '@/lib/api'
+import { getBestPerCoin, optimizeAllCoins, OptimizeResult } from '@/lib/api'
 import { DEFAULT_PARAMS, INTERVALS, COINS, STRATEGY_LABELS } from '@/lib/constants'
 import { useErrorToast } from '@/hooks/useErrorToast'
 
@@ -51,6 +51,12 @@ export default function BacktestPage() {
   const [bestProgress,  setBestProgress]  = useState({ done: 0, total: 0 })
   const [expandedCoin,  setExpandedCoin]  = useState<string | null>(null)
 
+  // Optimize & Save mode state
+  const [optLoading,  setOptLoading]  = useState(false)
+  const [optResults,  setOptResults]  = useState<OptimizeResult[]>([])
+  const [optProgress, setOptProgress] = useState({ done: 0, total: 0 })
+  const [optSaved,    setOptSaved]    = useState(false)
+
   const soloBuiltIn =
     strategies.length === 1 && !strategies[0].startsWith('combo_') ? strategies[0] : null
 
@@ -94,6 +100,29 @@ export default function BacktestPage() {
       }
     } catch (e: any) { addToast(`Best-strategy error: ${e.message}`, 'error') }
     setBestLoading(false)
+  }
+
+  const handleOptimizeSave = async () => {
+    const coinsToRun = [...COINS]
+    setOptLoading(true)
+    setOptResults([])
+    setOptSaved(false)
+    setOptProgress({ done: 0, total: coinsToRun.length })
+    try {
+      await optimizeAllCoins({
+        coins:    coinsToRun,
+        start_dt: new Date(bestStartDt).toISOString(),
+        end_dt:   new Date(bestEndDt).toISOString(),
+        interval: bestInterval,
+        save:     true,
+        onProgress: (done, total, result) => {
+          setOptProgress({ done, total })
+          setOptResults(prev => [...prev, result])
+        },
+      })
+      setOptSaved(true)
+    } catch (e: any) { addToast(`Optimise error: ${e.message}`, 'error') }
+    setOptLoading(false)
   }
 
   const isRunning = status === 'running'
@@ -214,11 +243,15 @@ export default function BacktestPage() {
                   className="w-full bg-surface border border-surface-border rounded px-2 py-1.5 text-sm text-white focus:outline-none focus:border-brand" />
               </div>
               <div className="flex flex-col gap-2">
-                <button onClick={() => handleBestRun(true)} disabled={bestLoading}
+                <button onClick={() => handleBestRun(true)} disabled={bestLoading || optLoading}
                   className={`py-1.5 rounded-lg text-xs font-semibold transition-all ${bestLoading ? 'bg-surface-border text-gray-500 cursor-not-allowed' : 'bg-brand hover:bg-brand-dark text-black'}`}>
-                  {bestLoading ? '⟳ Running…' : '⭐ All 20 Coins'}
+                  {bestLoading ? '⟳ Running…' : '⭐ Preview All 20'}
                 </button>
-                <button onClick={() => handleBestRun(false)} disabled={bestLoading}
+                <button onClick={handleOptimizeSave} disabled={bestLoading || optLoading}
+                  className={`py-1.5 rounded-lg text-xs font-semibold transition-all ${optLoading ? 'bg-surface-border text-gray-500 cursor-not-allowed' : 'bg-green-700 hover:bg-green-600 text-white'}`}>
+                  {optLoading ? `⟳ Optimising… ${optProgress.done}/${optProgress.total}` : '💾 Optimise & Save All'}
+                </button>
+                <button onClick={() => handleBestRun(false)} disabled={bestLoading || optLoading}
                   className="py-1.5 rounded-lg text-xs font-semibold bg-surface-card border border-surface-border text-gray-300 hover:text-white transition-all">
                   Selected Coins
                 </button>
@@ -321,6 +354,85 @@ export default function BacktestPage() {
                             </tr>
                           )}
                         </>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── OPTIMISE & SAVE RESULTS ── */}
+        {(optLoading || optResults.length > 0) && mode === 'best' && (
+          <div className="space-y-3 mt-4">
+            {optLoading && (
+              <div className="bg-surface-card border border-surface-border rounded-lg p-5">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm text-gray-300">Optimising + saving to DB…</span>
+                  <span className="text-sm font-semibold text-green-400">
+                    {optProgress.done} / {optProgress.total} coins
+                  </span>
+                </div>
+                <div className="w-full bg-surface rounded-full h-2">
+                  <div className="bg-green-500 h-2 rounded-full transition-all duration-300"
+                    style={{ width: optProgress.total ? `${optProgress.done / optProgress.total * 100}%` : '0%' }} />
+                </div>
+                <p className="text-xs text-gray-600 mt-2">
+                  Each coin: all 10 strategies + TP/SL grid search + saving to DB
+                </p>
+              </div>
+            )}
+
+            {optResults.length > 0 && (
+              <div className="bg-surface-card border border-surface-border rounded-lg overflow-hidden">
+                <div className="px-4 py-3 border-b border-surface-border flex items-center justify-between">
+                  <h3 className="text-sm font-semibold text-gray-300">
+                    Optimised Results {optSaved && <span className="text-green-400 ml-2 text-xs">✓ Saved to DB</span>}
+                  </h3>
+                  {optSaved && (
+                    <a href="/dashboard"
+                      className="text-xs px-3 py-1 bg-green-700/30 border border-green-700/50 rounded text-green-400 hover:bg-green-700/50 transition-colors">
+                      View Dashboard →
+                    </a>
+                  )}
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead className="text-gray-500 border-b border-surface-border">
+                      <tr>
+                        <th className="px-3 py-2 text-left font-medium">Coin</th>
+                        <th className="px-3 py-2 text-left font-medium">Best Strategy</th>
+                        <th className="px-3 py-2 text-left font-medium">TP1 / TP2 / SL</th>
+                        <th className="px-3 py-2 text-left font-medium">Win Rate</th>
+                        <th className="px-3 py-2 text-left font-medium">Total PnL</th>
+                        <th className="px-3 py-2 text-left font-medium">Trades</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {optResults.map(r => (
+                        <tr key={r.coin} className="border-b border-surface-border hover:bg-surface-hover">
+                          <td className="px-3 py-2 text-blue-400 font-semibold font-mono">
+                            {r.coin.replace('USDT', '')}
+                          </td>
+                          <td className="px-3 py-2 text-brand">
+                            {r.error ? <span className="text-red-400">{r.error}</span> : r.best_strategy_label}
+                          </td>
+                          <td className="px-3 py-2 text-gray-400 font-mono">
+                            {r.optimized_params
+                              ? `${r.optimized_params.tp_pct} / ${r.optimized_params.tp2_pct} / ${r.optimized_params.sl_pct}`
+                              : '—'}
+                          </td>
+                          <td className="px-3 py-2">
+                            <span className={`font-bold ${r.win_rate >= 60 ? 'text-green-400' : r.win_rate >= 50 ? 'text-yellow-400' : 'text-red-400'}`}>
+                              {r.win_rate.toFixed(1)}%
+                            </span>
+                          </td>
+                          <td className={`px-3 py-2 font-semibold font-mono ${r.total_pnl_pct >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                            {r.total_pnl_pct >= 0 ? '+' : ''}{r.total_pnl_pct.toFixed(2)}%
+                          </td>
+                          <td className="px-3 py-2 text-gray-400">{r.total_trades}</td>
+                        </tr>
                       ))}
                     </tbody>
                   </table>
