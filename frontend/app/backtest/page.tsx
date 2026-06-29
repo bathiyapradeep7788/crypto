@@ -5,6 +5,7 @@ import CoinSelector from '@/components/backtest/CoinSelector'
 import StrategySelector from '@/components/backtest/StrategySelector'
 import StrategyParams from '@/components/backtest/StrategyParams'
 import ResultsTable from '@/components/backtest/ResultsTable'
+import OptimizationDashboard from '@/components/backtest/OptimizationDashboard'
 import { useBacktest } from '@/hooks/useBacktest'
 import { getBestPerCoin, optimizeAllCoins, OptimizeResult } from '@/lib/api'
 import { DEFAULT_PARAMS, INTERVALS, COINS, STRATEGY_LABELS } from '@/lib/constants'
@@ -25,7 +26,7 @@ export default function BacktestPage() {
   const { addToast } = useErrorToast()
 
   // Mode toggle
-  const [mode, setMode] = useState<'manual' | 'best'>('manual')
+  const [mode, setMode] = useState<'manual' | 'best' | 'optimize'>('manual')
 
   // Manual mode state
   const [coins,       setCoins]       = useState<string[]>(['BTCUSDT', 'ETHUSDT'])
@@ -154,7 +155,11 @@ export default function BacktestPage() {
               </button>
               <button onClick={() => setMode('best')}
                 className={`text-xs px-4 py-2 font-medium transition-colors ${mode==='best' ? 'bg-brand text-black' : 'bg-surface-card text-gray-400 hover:text-white'}`}>
-                ⭐ Find Best Strategy
+                ⭐ Find Best
+              </button>
+              <button onClick={() => setMode('optimize')}
+                className={`text-xs px-4 py-2 font-medium transition-colors ${mode==='optimize' ? 'bg-gradient-to-r from-brand to-blue-500 text-black' : 'bg-surface-card text-gray-400 hover:text-white'}`}>
+                🚀 Optimization
               </button>
             </div>
           </div>
@@ -362,6 +367,9 @@ export default function BacktestPage() {
             )}
           </div>
         )}
+
+        {/* ── OPTIMIZATION DASHBOARD MODE ── */}
+        {mode === 'optimize' && <OptimizationDashboard />}
 
         {/* ── OPTIMISE & SAVE RESULTS ── */}
         {(optLoading || optResults.length > 0) && mode === 'best' && (
