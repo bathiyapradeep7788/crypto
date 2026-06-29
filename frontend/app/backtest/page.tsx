@@ -6,6 +6,7 @@ import StrategySelector from '@/components/backtest/StrategySelector'
 import StrategyParams from '@/components/backtest/StrategyParams'
 import ResultsTable from '@/components/backtest/ResultsTable'
 import OptimizationDashboard from '@/components/backtest/OptimizationDashboard'
+import PortfolioDashboard from '@/components/backtest/PortfolioDashboard'
 import { useBacktest } from '@/hooks/useBacktest'
 import { getBestPerCoin, optimizeAllCoins, OptimizeResult } from '@/lib/api'
 import { DEFAULT_PARAMS, INTERVALS, COINS, STRATEGY_LABELS } from '@/lib/constants'
@@ -26,7 +27,7 @@ export default function BacktestPage() {
   const { addToast } = useErrorToast()
 
   // Mode toggle
-  const [mode, setMode] = useState<'manual' | 'best' | 'optimize'>('manual')
+  const [mode, setMode] = useState<'manual' | 'best' | 'optimize' | 'portfolio'>('manual')
 
   // Manual mode state
   const [coins,       setCoins]       = useState<string[]>(['BTCUSDT', 'ETHUSDT'])
@@ -160,6 +161,10 @@ export default function BacktestPage() {
               <button onClick={() => setMode('optimize')}
                 className={`text-xs px-4 py-2 font-medium transition-colors ${mode==='optimize' ? 'bg-gradient-to-r from-brand to-blue-500 text-black' : 'bg-surface-card text-gray-400 hover:text-white'}`}>
                 🚀 Optimization
+              </button>
+              <button onClick={() => setMode('portfolio')}
+                className={`text-xs px-4 py-2 font-medium transition-colors ${mode==='portfolio' ? 'bg-gradient-to-r from-purple-600 to-blue-600 text-white' : 'bg-surface-card text-gray-400 hover:text-white'}`}>
+                🏛 Portfolio
               </button>
             </div>
           </div>
@@ -370,6 +375,9 @@ export default function BacktestPage() {
 
         {/* ── OPTIMIZATION DASHBOARD MODE ── */}
         {mode === 'optimize' && <OptimizationDashboard />}
+
+        {/* ── INSTITUTIONAL PORTFOLIO MODE ── */}
+        {mode === 'portfolio' && <PortfolioDashboard />}
 
         {/* ── OPTIMISE & SAVE RESULTS ── */}
         {(optLoading || optResults.length > 0) && mode === 'best' && (
