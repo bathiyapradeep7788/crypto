@@ -41,6 +41,20 @@ type BestRow = {
   tp2_pct:                 number
   sl_pct:                  number
   updated_at:              string
+  // populated on demand by /api/optimize/run-coin (all_strategies breakdown)
+  all_strategies?: StratRow[]
+}
+
+type StratRow = {
+  name:      string
+  label:     string
+  win_rate:  number
+  total_pnl: number
+  max_dd:    number
+  trades:    number
+  tp_pct:    number
+  tp2_pct:   number
+  sl_pct:    number
 }
 
 // ── Helpers ────────────────────────────────────────────────────
@@ -137,7 +151,7 @@ function CoinBadge({ cs, active }: { cs: CoinState; active: boolean }) {
 function StepBar({ phase }: { phase: GlobalPhase }) {
   const steps = [
     { id: 'step1', label: 'Step 1 / 3', desc: 'Clear DB & Fetch 5-Month Candles' },
-    { id: 'step2', label: 'Step 2 / 3', desc: 'Run 10 Strategies + TP/SL Grid' },
+    { id: 'step2', label: 'Step 2 / 3', desc: 'Concurrent Signal Scan (No Lock)' },
     { id: 'step3', label: 'Step 3 / 3', desc: 'Render Final Report' },
   ]
   const order: Record<string, number> = { idle: -1, step1: 0, step2: 1, step3: 2, done: 3, error: 3 }
@@ -199,6 +213,8 @@ export default function OptimizationDashboard() {
   const [results,     setResults]     = useState<BestRow[]>([])
   const [loadingDB,   setLoadingDB]   = useState(false)
   const [errorMsg,    setErrorMsg]    = useState<string | null>(null)
+  const [expanded,    setExpanded]    = useState<Record<string, boolean>>({})
+  const [loadingStrats, setLoadingStrats] = useState<Record<string, boolean>>({})
 
   // Load saved results on mount
   useEffect(() => { refreshResults() }, [])
@@ -309,6 +325,29 @@ export default function OptimizationDashboard() {
     setPhase('done')
   }, [coinMap])
 
+  // ── Load all-strategies breakdown for a coin ─────────────────
+  async function toggleStrategies(coin: string) {
+    const isOpen = expanded[coin]
+    setExpanded(prev => ({ ...prev, [coin]: !isOpen }))
+
+    // Already loaded → just toggle visibility
+    const existing = results.find(r => r.coin === coin)
+    if (existing?.all_strategies || isOpen) return
+
+    setLoadingStrats(prev => ({ ...prev, [coin]: true }))
+    try {
+      const res = await fetch(`/api/optimize/run-coin?coin=${coin}`)
+      if (!res.ok) return
+      const j = await res.json()
+      if (!j.all_strategies) return
+      setResults(prev => prev.map(r =>
+        r.coin === coin ? { ...r, all_strategies: j.all_strategies } : r
+      ))
+    } finally {
+      setLoadingStrats(prev => ({ ...prev, [coin]: false }))
+    }
+  }
+
   // ── Derived stats ─────────────────────────────────────────────
   const total      = OPT_COINS.length
   const s1Pct      = Math.round((step1Done / total) * 100)
@@ -417,7 +456,7 @@ export default function OptimizationDashboard() {
               />
             </div>
             <p className="text-[10px] text-gray-600">
-              36 TP/SL combos × 10 strategies per coin · best result (MDD &lt; 20%) saved to Supabase
+              All signals captured independently per timestamp · no position locking · 36 TP/SL combos × 10 strategies
             </p>
           </div>
         )}
@@ -535,57 +574,168 @@ export default function OptimizationDashboard() {
               </thead>
               <tbody>
                 {results.map((r, idx) => {
-                  const pos     = r.total_pnl_percentage >= 0
-                  const wrGood  = r.win_rate_percentage >= 60
-                  const wrOk    = r.win_rate_percentage >= 50
-                  const mddHigh = r.max_drawdown_percentage > 15
-                  const label   = STRATEGY_LABELS[r.best_strategy_name] ?? r.best_strategy_name
+                  const pos      = r.total_pnl_percentage >= 0
+                  const wrGood   = r.win_rate_percentage >= 60
+                  const wrOk     = r.win_rate_percentage >= 50
+                  const mddHigh  = r.max_drawdown_percentage > 15
+                  const label    = STRATEGY_LABELS[r.best_strategy_name] ?? r.best_strategy_name
+                  const isOpen   = expanded[r.coin]
+                  const loading  = loadingStrats[r.coin]
 
                   return (
-                    <tr key={r.coin}
-                      className="border-b border-surface-border hover:bg-surface/50 transition-colors">
-                      <td className="px-4 py-3 text-gray-600 font-mono">{idx + 1}</td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-2">
-                          <span className={`w-2 h-2 rounded-full flex-shrink-0 ${pos ? 'bg-green-500' : 'bg-red-500'}`} />
-                          <span className="font-bold font-mono text-white text-sm">
-                            {r.coin.replace('USDT', '')}
+                    <>
+                      {/* ── Best-strategy row ─────────────────────── */}
+                      <tr key={r.coin}
+                        className="border-b border-surface-border hover:bg-surface/50 transition-colors cursor-pointer"
+                        onClick={() => toggleStrategies(r.coin)}>
+                        <td className="px-4 py-3 text-gray-600 font-mono">{idx + 1}</td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2">
+                            <span className={`text-gray-500 text-[10px] transition-transform ${isOpen ? 'rotate-90' : ''}`}>▶</span>
+                            <span className={`w-2 h-2 rounded-full flex-shrink-0 ${pos ? 'bg-green-500' : 'bg-red-500'}`} />
+                            <span className="font-bold font-mono text-white text-sm">
+                              {r.coin.replace('USDT', '')}
+                            </span>
+                            <span className="text-gray-600 text-[10px]">/USDT</span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className="text-brand font-medium">{label}</span>
+                          <span className="ml-2 text-[10px] text-yellow-500 font-semibold">★ BEST</span>
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <span className={`font-bold px-2 py-0.5 rounded text-[11px] ${
+                            wrGood ? 'bg-green-900/30 text-green-400' :
+                            wrOk   ? 'bg-yellow-900/30 text-yellow-400' :
+                                     'bg-red-900/20 text-red-400'
+                          }`}>
+                            {r.win_rate_percentage.toFixed(1)}%
                           </span>
-                          <span className="text-gray-600 text-[10px]">/USDT</span>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className="text-brand font-medium">{label}</span>
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        <span className={`font-bold px-2 py-0.5 rounded text-[11px] ${
-                          wrGood ? 'bg-green-900/30 text-green-400' :
-                          wrOk   ? 'bg-yellow-900/30 text-yellow-400' :
-                                   'bg-red-900/20 text-red-400'
-                        }`}>
-                          {r.win_rate_percentage.toFixed(1)}%
-                        </span>
-                      </td>
-                      <td className={`px-4 py-3 text-right font-bold font-mono text-sm ${pos ? 'text-green-400' : 'text-red-400'}`}>
-                        {pos ? '+' : ''}{r.total_pnl_percentage.toFixed(2)}%
-                      </td>
-                      <td className={`px-4 py-3 text-right font-mono ${mddHigh ? 'text-orange-400' : 'text-gray-400'}`}>
-                        {r.max_drawdown_percentage.toFixed(1)}%
-                      </td>
-                      <td className="px-4 py-3 text-right text-gray-400">
-                        {r.total_trades.toLocaleString()}
-                      </td>
-                      <td className="px-4 py-3 text-center font-mono text-[10px]">
-                        <span className="text-green-500">{r.tp_pct ?? '—'}</span>
-                        <span className="text-gray-600"> / </span>
-                        <span className="text-blue-400">{r.tp2_pct ?? '—'}</span>
-                        <span className="text-gray-600"> / </span>
-                        <span className="text-red-400">{r.sl_pct ?? '—'}</span>
-                      </td>
-                      <td className="px-4 py-3 text-center text-gray-600 text-[10px]">
-                        {r.updated_at ? new Date(r.updated_at).toLocaleDateString('en-GB') : '—'}
-                      </td>
-                    </tr>
+                        </td>
+                        <td className={`px-4 py-3 text-right font-bold font-mono text-sm ${pos ? 'text-green-400' : 'text-red-400'}`}>
+                          {pos ? '+' : ''}{r.total_pnl_percentage.toFixed(2)}%
+                        </td>
+                        <td className={`px-4 py-3 text-right font-mono ${mddHigh ? 'text-orange-400' : 'text-gray-400'}`}>
+                          {r.max_drawdown_percentage.toFixed(1)}%
+                        </td>
+                        <td className="px-4 py-3 text-right text-gray-400">
+                          {r.total_trades.toLocaleString()}
+                        </td>
+                        <td className="px-4 py-3 text-center font-mono text-[10px]">
+                          <span className="text-green-500">{r.tp_pct ?? '—'}</span>
+                          <span className="text-gray-600"> / </span>
+                          <span className="text-blue-400">{r.tp2_pct ?? '—'}</span>
+                          <span className="text-gray-600"> / </span>
+                          <span className="text-red-400">{r.sl_pct ?? '—'}</span>
+                        </td>
+                        <td className="px-4 py-3 text-center text-gray-600 text-[10px]">
+                          {r.updated_at ? new Date(r.updated_at).toLocaleDateString('en-GB') : '—'}
+                        </td>
+                      </tr>
+
+                      {/* ── All-strategies expansion ───────────────── */}
+                      {isOpen && (
+                        <tr key={`${r.coin}-exp`} className="border-b border-surface-border">
+                          <td colSpan={9} className="px-0 py-0">
+                            <div className="bg-black/30 border-t border-surface-border/40">
+                              {loading ? (
+                                <div className="flex items-center gap-2 px-8 py-4 text-xs text-gray-500">
+                                  <svg className="animate-spin w-3.5 h-3.5" fill="none" viewBox="0 0 24 24">
+                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+                                  </svg>
+                                  Loading all strategy results for {r.coin.replace('USDT','')}…
+                                </div>
+                              ) : r.all_strategies ? (
+                                <table className="w-full text-[11px]">
+                                  <thead>
+                                    <tr className="text-gray-600 border-b border-surface-border/40">
+                                      <th className="px-8 py-2 text-left font-medium w-6" />
+                                      <th className="px-4 py-2 text-left font-medium">Strategy</th>
+                                      <th className="px-4 py-2 text-right font-medium">Win Rate</th>
+                                      <th className="px-4 py-2 text-right font-medium">Total PnL %</th>
+                                      <th className="px-4 py-2 text-right font-medium">Max DD %</th>
+                                      <th className="px-4 py-2 text-right font-medium">Signals</th>
+                                      <th className="px-4 py-2 text-center font-medium">TP1 / TP2 / SL</th>
+                                      <th className="px-8 py-2" />
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {[...r.all_strategies]
+                                      .sort((a, b) => b.total_pnl - a.total_pnl)
+                                      .map(s => {
+                                        const isBest   = s.name === r.best_strategy_name
+                                        const sPos     = s.total_pnl >= 0
+                                        const sWrGood  = s.win_rate >= 60
+                                        const sWrOk    = s.win_rate >= 50
+                                        const noTrades = s.trades === 0
+                                        return (
+                                          <tr key={s.name}
+                                            className={`border-b border-surface-border/20 ${
+                                              isBest ? 'bg-brand/5' : 'hover:bg-white/3'
+                                            }`}>
+                                            <td className="px-8 py-2">
+                                              {isBest && <span className="text-yellow-500 text-[10px]">★</span>}
+                                            </td>
+                                            <td className="px-4 py-2">
+                                              <span className={isBest ? 'text-brand font-semibold' : 'text-gray-300'}>
+                                                {s.label}
+                                              </span>
+                                            </td>
+                                            <td className="px-4 py-2 text-right">
+                                              {noTrades ? (
+                                                <span className="text-gray-600">—</span>
+                                              ) : (
+                                                <span className={
+                                                  sWrGood ? 'text-green-400' :
+                                                  sWrOk   ? 'text-yellow-400' : 'text-red-400'
+                                                }>
+                                                  {s.win_rate.toFixed(1)}%
+                                                </span>
+                                              )}
+                                            </td>
+                                            <td className={`px-4 py-2 text-right font-mono font-bold ${
+                                              noTrades ? 'text-gray-600' :
+                                              sPos     ? 'text-green-400' : 'text-red-400'
+                                            }`}>
+                                              {noTrades ? '—' : `${sPos ? '+' : ''}${s.total_pnl.toFixed(2)}%`}
+                                            </td>
+                                            <td className={`px-4 py-2 text-right font-mono ${
+                                              noTrades          ? 'text-gray-600' :
+                                              s.max_dd > 15     ? 'text-orange-400' : 'text-gray-400'
+                                            }`}>
+                                              {noTrades ? '—' : `${s.max_dd.toFixed(1)}%`}
+                                            </td>
+                                            <td className="px-4 py-2 text-right text-gray-500">
+                                              {noTrades ? <span className="text-gray-700">0</span> : s.trades}
+                                            </td>
+                                            <td className="px-4 py-2 text-center font-mono text-[10px]">
+                                              {noTrades ? (
+                                                <span className="text-gray-700">—</span>
+                                              ) : (
+                                                <>
+                                                  <span className="text-green-600">{s.tp_pct}</span>
+                                                  <span className="text-gray-700"> / </span>
+                                                  <span className="text-blue-600">{s.tp2_pct}</span>
+                                                  <span className="text-gray-700"> / </span>
+                                                  <span className="text-red-600">{s.sl_pct}</span>
+                                                </>
+                                              )}
+                                            </td>
+                                            <td className="px-8 py-2" />
+                                          </tr>
+                                        )
+                                      })}
+                                  </tbody>
+                                </table>
+                              ) : (
+                                <p className="px-8 py-4 text-xs text-gray-600">No strategy data — click row again to retry.</p>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </>
                   )
                 })}
               </tbody>

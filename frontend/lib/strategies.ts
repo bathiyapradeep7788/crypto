@@ -1,5 +1,11 @@
 // ============================================================
-//  AlgoBot — 10 Strategy Engine (pure TypeScript, no deps)
+//  AlgoBot — Concurrent Signal Engine (pure TypeScript, no deps)
+//
+//  Key design: NO position locking.
+//  Every signal that fires at any timestamp is independently
+//  simulated — multiple overlapping trades are captured.
+//  TP vs SL order is determined by candle direction (not SL-first).
+//  Timeout exits at actual close price, not a forced loss.
 // ============================================================
 
 export type Candle = {
@@ -23,12 +29,40 @@ export type StrategyResult = {
   sl_pct: number
 }
 
-// ── Math Helpers ──────────────────────────────────────────────
+// ── Precomputed indicator cache ───────────────────────────────
+// All indicators computed ONCE per coin, reused across all strategies.
+
+type Cache = {
+  closes:   number[]
+  highs:    number[]
+  lows:     number[]
+  volumes:  number[]
+  rsi14:    number[]
+  macdHist: number[]
+  ema21:    number[]
+  ema55:    number[]
+  ema8:     number[]
+  bbUpper:  number[]
+  bbLower:  number[]
+  bbMid:    number[]
+  bbWidth:  number[]
+  vwapArr:  number[]
+  stochK:   number[]
+  ichi: {
+    tenkan: number[]
+    kijun:  number[]
+    senkA:  number[]
+    senkB:  number[]
+  }
+  volSma20: number[]
+  highSma20: number[]
+}
+
+// ── Math helpers ──────────────────────────────────────────────
 
 function ema(data: number[], period: number): number[] {
   const k = 2 / (period + 1)
   const out = new Array(data.length).fill(0)
-  // seed with SMA of first period values
   let sum = 0
   for (let i = 0; i < period && i < data.length; i++) sum += data[i]
   out[period - 1] = sum / period
@@ -47,7 +81,7 @@ function sma(data: number[], period: number): number[] {
   })
 }
 
-function rsi(closes: number[], period = 14): number[] {
+function computeRsi(closes: number[], period = 14): number[] {
   const out = new Array(closes.length).fill(50)
   let avgGain = 0, avgLoss = 0
   for (let i = 1; i <= period; i++) {
@@ -65,58 +99,51 @@ function rsi(closes: number[], period = 14): number[] {
   return out
 }
 
-function macd(closes: number[]): { line: number[]; signal: number[]; hist: number[] } {
+function computeMacdHist(closes: number[]): number[] {
   const fast = ema(closes, 12)
   const slow = ema(closes, 26)
   const line = fast.map((v, i) => v - slow[i])
-  const signal = ema(line, 9)
-  const hist = line.map((v, i) => v - signal[i])
-  return { line, signal, hist }
+  const sig  = ema(line, 9)
+  return line.map((v, i) => v - sig[i])
 }
 
-function bollinger(closes: number[], period = 20, mult = 2): {
-  upper: number[]; middle: number[]; lower: number[]; bwidth: number[]
-} {
-  const upper: number[] = [], middle: number[] = [], lower: number[] = [], bwidth: number[] = []
+function computeBollinger(closes: number[], period = 20, mult = 2) {
+  const upper: number[] = [], lower: number[] = [], mid: number[] = [], width: number[] = []
   for (let i = 0; i < closes.length; i++) {
-    if (i < period - 1) { upper.push(0); middle.push(0); lower.push(0); bwidth.push(999); continue }
+    if (i < period - 1) { upper.push(0); lower.push(0); mid.push(0); width.push(999); continue }
     const sl = closes.slice(i - period + 1, i + 1)
     const avg = sl.reduce((a, b) => a + b) / period
     const std = Math.sqrt(sl.reduce((s, v) => s + (v - avg) ** 2, 0) / period)
-    const u = avg + mult * std, l = avg - mult * std
-    upper.push(u); middle.push(avg); lower.push(l)
-    bwidth.push(avg > 0 ? (u - l) / avg * 100 : 0)
+    upper.push(avg + mult * std)
+    lower.push(avg - mult * std)
+    mid.push(avg)
+    width.push(avg > 0 ? (avg + mult * std - (avg - mult * std)) / avg * 100 : 0)
   }
-  return { upper, middle, lower, bwidth }
+  return { upper, lower, mid, width }
 }
 
-function vwap(candles: Candle[]): number[] {
+function computeVwap(candles: Candle[]): number[] {
   const out: number[] = []
   let cumTPV = 0, cumVol = 0
   for (const c of candles) {
     const tp = (c.high + c.low + c.close) / 3
-    cumTPV += tp * c.volume
-    cumVol += c.volume
+    cumTPV += tp * c.volume; cumVol += c.volume
     out.push(cumVol > 0 ? cumTPV / cumVol : tp)
   }
   return out
 }
 
-function stochRSI(closes: number[], rsiPeriod = 14, stochPeriod = 14): { k: number[]; d: number[] } {
-  const r = rsi(closes, rsiPeriod)
-  const k: number[] = []
-  for (let i = 0; i < r.length; i++) {
-    if (i < rsiPeriod + stochPeriod - 2) { k.push(50); continue }
-    const sl = r.slice(i - stochPeriod + 1, i + 1)
+function computeStochRsi(closes: number[], rsiP = 14, stochP = 14): number[] {
+  const r = computeRsi(closes, rsiP)
+  return r.map((v, i) => {
+    if (i < rsiP + stochP - 2) return 50
+    const sl = r.slice(i - stochP + 1, i + 1)
     const mn = Math.min(...sl), mx = Math.max(...sl)
-    k.push(mx === mn ? 50 : (r[i] - mn) / (mx - mn) * 100)
-  }
-  return { k, d: sma(k, 3) }
+    return mx === mn ? 50 : (v - mn) / (mx - mn) * 100
+  })
 }
 
-function ichimoku(candles: Candle[]): {
-  tenkan: number[]; kijun: number[]; senkouA: number[]; senkouB: number[]
-} {
+function computeIchimoku(candles: Candle[]) {
   const hi = (cs: Candle[]) => Math.max(...cs.map(c => c.high))
   const lo = (cs: Candle[]) => Math.min(...cs.map(c => c.low))
   const tenkan = candles.map((_, i) => {
@@ -129,56 +156,208 @@ function ichimoku(candles: Candle[]): {
     const sl = candles.slice(i - 25, i + 1)
     return (hi(sl) + lo(sl)) / 2
   })
-  const senkouA = tenkan.map((t, i) => (t + kijun[i]) / 2)
-  const senkouB = candles.map((_, i) => {
+  const senkA = tenkan.map((t, i) => (t + kijun[i]) / 2)
+  const senkB = candles.map((_, i) => {
     if (i < 51) return 0
     const sl = candles.slice(i - 51, i + 1)
     return (hi(sl) + lo(sl)) / 2
   })
-  return { tenkan, kijun, senkouA, senkouB }
+  return { tenkan, kijun, senkA, senkB }
 }
 
 function percentile(arr: number[], p: number): number {
   const sorted = [...arr].sort((a, b) => a - b)
-  const idx = Math.floor((p / 100) * sorted.length)
-  return sorted[Math.min(idx, sorted.length - 1)]
+  return sorted[Math.floor((p / 100) * sorted.length)] ?? 0
 }
 
-// ── Trade Simulator ───────────────────────────────────────────
+function buildCache(candles: Candle[]): Cache {
+  const closes  = candles.map(c => c.close)
+  const highs   = candles.map(c => c.high)
+  const lows    = candles.map(c => c.low)
+  const volumes = candles.map(c => c.volume)
+  const bb = computeBollinger(closes)
+  return {
+    closes, highs, lows, volumes,
+    rsi14:    computeRsi(closes),
+    macdHist: computeMacdHist(closes),
+    ema21:    ema(closes, 21),
+    ema55:    ema(closes, 55),
+    ema8:     ema(closes, 8),
+    bbUpper:  bb.upper,
+    bbLower:  bb.lower,
+    bbMid:    bb.mid,
+    bbWidth:  bb.width,
+    vwapArr:  computeVwap(candles),
+    stochK:   computeStochRsi(closes),
+    ichi:     computeIchimoku(candles),
+    volSma20: sma(volumes, 20),
+    highSma20: sma(highs, 20),
+  }
+}
+
+// ── Per-candle signal conditions ──────────────────────────────
+// Returns true if a BUY signal fires at index i.
+// No position locking — called for EVERY candle independently.
+
+type SigFn = (candles: Candle[], i: number, c: Cache) => boolean
+
+function sigRsiMacd(candles: Candle[], i: number, c: Cache): boolean {
+  if (i < 30) return false
+  return (
+    c.rsi14[i] < 35 &&
+    c.rsi14[i] > c.rsi14[i - 1] &&           // RSI turning up
+    c.macdHist[i] > c.macdHist[i - 1] &&     // MACD hist rising
+    c.macdHist[i] < 0                         // still below zero (early entry)
+  )
+}
+
+function sigEmaCross(candles: Candle[], i: number, c: Cache): boolean {
+  if (i < 60) return false
+  return (
+    c.ema21[i - 1] <= c.ema55[i - 1] &&
+    c.ema21[i]     >  c.ema55[i]          // golden cross
+  )
+}
+
+function sigBollinger(candles: Candle[], i: number, c: Cache): boolean {
+  if (i < 22) return false
+  // Squeeze: bandwidth at 20th percentile; price breaks above lower band
+  const sqThresh = percentile(c.bbWidth.slice(Math.max(0, i - 50), i).filter(v => v < 999), 20)
+  const squeezed = c.bbWidth[i - 1] <= sqThresh
+  const breakUp  = candles[i - 1].close <= c.bbLower[i - 1] &&
+                   candles[i].close     >  c.bbLower[i]
+  return squeezed && breakUp
+}
+
+function sigVwap(candles: Candle[], i: number, c: Cache): boolean {
+  if (i < 5) return false
+  return (
+    candles[i - 1].close < c.vwapArr[i - 1] &&  // was below VWAP
+    candles[i].close     > c.vwapArr[i] &&        // crossed above
+    c.rsi14[i] < 55 &&                            // not overbought
+    candles[i].close > candles[i].open             // bullish bar
+  )
+}
+
+function sigSupportResistance(candles: Candle[], i: number, c: Cache): boolean {
+  if (i < 22) return false
+  const window = candles.slice(i - 20, i)
+  const support = Math.min(...window.map(c => c.low))
+  const tol = support * 0.004
+  return (
+    Math.abs(candles[i].low - support) < tol &&
+    candles[i].close > candles[i].open &&
+    candles[i].close > candles[i - 1].close
+  )
+}
+
+function sigIchimoku(candles: Candle[], i: number, c: Cache): boolean {
+  if (i < 52) return false
+  const kumoTop  = Math.max(c.ichi.senkA[i],     c.ichi.senkB[i])
+  const prevTop  = Math.max(c.ichi.senkA[i - 1], c.ichi.senkB[i - 1])
+  return (
+    candles[i - 1].close <= prevTop &&
+    candles[i].close     >  kumoTop    // price breaks above cloud
+  )
+}
+
+function sigStochRsiVol(candles: Candle[], i: number, c: Cache): boolean {
+  if (i < 30) return false
+  return (
+    c.stochK[i - 1] < 20 &&
+    c.stochK[i]     > 20 &&                         // stoch RSI crosses 20 upward
+    candles[i].volume > c.volSma20[i] * 1.3          // above-average volume
+  )
+}
+
+function sigIctOrderBlock(candles: Candle[], i: number, c: Cache): boolean {
+  if (i < 4) return false
+  // Find a recent bearish order block in the last 5 bars
+  const slice = candles.slice(i - 4, i)
+  const ob = slice.find(s => s.open > s.close && (s.open - s.close) / s.open > 0.003)
+  if (!ob) return false
+  // Current bar closes above the OB open (reclaiming bearish OB = bullish)
+  return (
+    candles[i].close > ob.open &&
+    candles[i - 1].close <= ob.open
+  )
+}
+
+function sigFibonacci(candles: Candle[], i: number, c: Cache): boolean {
+  if (i < 55) return false
+  const slice = candles.slice(i - 50, i)
+  const swHigh = Math.max(...slice.map(s => s.high))
+  const swLow  = Math.min(...slice.map(s => s.low))
+  const range = swHigh - swLow
+  if (range < swLow * 0.015) return false        // skip tiny range
+  const fib618 = swHigh - range * 0.618
+  return (
+    Math.abs(candles[i].close - fib618) / fib618 < 0.005 &&
+    c.rsi14[i] < 50 &&
+    candles[i].close > candles[i].open
+  )
+}
+
+function sigVolumeMomentum(candles: Candle[], i: number, c: Cache): boolean {
+  if (i < 22) return false
+  return (
+    candles[i].volume > c.volSma20[i] * 2.0 &&
+    candles[i].close  > candles[i].open &&
+    candles[i].high   > c.highSma20[i - 1] &&   // breaks 20-bar high avg
+    c.ema8[i] > c.ema21[i]                       // short trend above long
+  )
+}
+
+// ── Strategy registry ─────────────────────────────────────────
+
+const STRATEGIES: { name: string; label: string; fn: SigFn }[] = [
+  { name: 'rsi_macd',            label: 'RSI + MACD',               fn: sigRsiMacd          },
+  { name: 'ema_crossover',       label: 'EMA 21/55 Crossover',      fn: sigEmaCross         },
+  { name: 'bollinger_squeeze',   label: 'Bollinger Band Squeeze',   fn: sigBollinger        },
+  { name: 'vwap_mean_reversion', label: 'VWAP Mean Reversion',      fn: sigVwap             },
+  { name: 'support_resistance',  label: 'S/R Bounce',               fn: sigSupportResistance},
+  { name: 'ichimoku',            label: 'Ichimoku Cloud Break',     fn: sigIchimoku         },
+  { name: 'stoch_rsi_volume',    label: 'Stoch RSI + Volume',       fn: sigStochRsiVol      },
+  { name: 'ict_order_block',     label: 'ICT Order Block',          fn: sigIctOrderBlock    },
+  { name: 'fibonacci',           label: 'Fibonacci Retracement',    fn: sigFibonacci        },
+  { name: 'volume_momentum',     label: 'Volume-Momentum Breakout', fn: sigVolumeMomentum   },
+]
+
+// ── Independent signal simulation ────────────────────────────
+// Each signal is simulated in isolation — no position lock.
+// TP vs SL order is resolved by candle open/close direction.
 
 const TP_GRID  = [1.5, 2.0, 2.5, 3.0]
 const TP2_GRID = [3.0, 4.0, 5.0]
 const SL_GRID  = [1.0, 1.5, 2.0]
-const MAX_HOLD = 48  // candles (~12h at 15m)
+const MAX_HOLD = 32   // candles (~8 h at 15m) before timeout exit
 
-function simOnce(
+function simulateSignal(
   candles: Candle[],
-  signals: boolean[],
-  tp: number, tp2: number, sl: number
-): { wins: number; losses: number; pnl: number; equity: number[]; trades: number } {
-  let wins = 0, losses = 0, pnl = 0
-  const equity: number[] = []
-  let cum = 0
-  for (let i = 52; i < signals.length - MAX_HOLD - 1; i++) {
-    if (!signals[i]) continue
-    const entry = candles[i].close
-    const tpPrice  = entry * (1 + tp / 100)
-    const tp2Price = entry * (1 + tp2 / 100)
-    const slPrice  = entry * (1 - sl / 100)
-    let result = -sl
-    for (let j = i + 1; j <= i + MAX_HOLD; j++) {
-      const { low, high } = candles[j]
-      // SL checked first (conservative)
-      if (low <= slPrice) { result = -sl; break }
-      if (high >= tp2Price) { result = tp2; break }
-      if (high >= tpPrice)  { result = tp;  break }
+  entryIdx: number,
+  tp_pct: number,
+  sl_pct: number,
+): number {   // returns realised PnL %
+  const entry = candles[entryIdx].close
+  const tpPrice = entry * (1 + tp_pct / 100)
+  const slPrice = entry * (1 - sl_pct / 100)
+
+  for (let j = entryIdx + 1; j < Math.min(entryIdx + MAX_HOLD + 1, candles.length); j++) {
+    const { high, low, open, close } = candles[j]
+    const hitTP = high >= tpPrice
+    const hitSL = low  <= slPrice
+
+    if (hitTP && hitSL) {
+      // Both in same candle: bullish candle → TP hit first; bearish → SL hit first
+      return close >= open ? tp_pct : -sl_pct
     }
-    if (result > 0) wins++; else losses++
-    pnl += result
-    cum += result
-    equity.push(cum)
+    if (hitTP) return tp_pct
+    if (hitSL) return -sl_pct
   }
-  return { wins, losses, pnl, equity, trades: wins + losses }
+
+  // Timeout: exit at actual close price (not a forced loss)
+  const exitIdx = Math.min(entryIdx + MAX_HOLD, candles.length - 1)
+  return ((candles[exitIdx].close - entry) / entry) * 100
 }
 
 function maxDrawdown(equity: number[]): number {
@@ -191,222 +370,85 @@ function maxDrawdown(equity: number[]): number {
   return mdd
 }
 
-function bestParams(candles: Candle[], signals: boolean[]): {
-  winRate: number; totalPnl: number; mdd: number; trades: number; tp: number; tp2: number; sl: number
-} {
-  let best = { winRate: 0, totalPnl: -Infinity, mdd: 100, trades: 0, tp: 2, tp2: 4, sl: 1.5 }
+// ── Grid search over TP/SL params for one strategy ───────────
+// Scans EVERY candle independently — concurrent signals captured.
+
+function optimiseStrategy(
+  candles: Candle[],
+  fn: SigFn,
+  cache: Cache,
+): StrategyResult | null {
+  let best: StrategyResult | null = null
+
   for (const tp of TP_GRID) {
     for (const tp2 of TP2_GRID) {
       if (tp2 <= tp) continue
       for (const sl of SL_GRID) {
-        const { wins, losses, pnl, equity, trades } = simOnce(candles, signals, tp, tp2, sl)
-        if (trades < 5) continue
+        const pnls: number[] = []
+
+        // Scan EVERY candle — no skip, no lock
+        for (let i = 55; i < candles.length - MAX_HOLD - 1; i++) {
+          if (fn(candles, i, cache)) {
+            pnls.push(simulateSignal(candles, i, tp, sl))
+          }
+        }
+
+        if (pnls.length < 3) continue   // need at least 3 independent trades
+
+        const wins      = pnls.filter(p => p > 0).length
+        const totalPnl  = pnls.reduce((a, b) => a + b, 0)
+        let cumPnl = 0
+        const equity = pnls.map(p => { cumPnl += p; return cumPnl })
         const mdd = maxDrawdown(equity)
-        if (mdd > 20) continue  // reject if drawdown > 20%
-        const wr = trades > 0 ? (wins / trades) * 100 : 0
-        if (pnl > best.totalPnl) {
-          best = { winRate: wr, totalPnl: pnl, mdd, trades, tp, tp2, sl }
+
+        if (mdd >= 20) continue          // reject high-drawdown combos
+
+        if (!best || totalPnl > best.total_pnl_pct) {
+          best = {
+            name:             '',   // filled by caller
+            label:            '',
+            win_rate:         (wins / pnls.length) * 100,
+            total_pnl_pct:    totalPnl,
+            max_drawdown_pct: mdd,
+            total_trades:     pnls.length,
+            tp_pct:           tp,
+            tp2_pct:          tp2,
+            sl_pct:           sl,
+          }
         }
       }
     }
   }
+
   return best
 }
 
-// ── Signal Generators (one per strategy) ─────────────────────
-
-function sigRsiMacd(candles: Candle[]): boolean[] {
-  const closes = candles.map(c => c.close)
-  const r = rsi(closes, 14)
-  const { hist } = macd(closes)
-  return candles.map((_, i) =>
-    i >= 26 &&
-    r[i] < 32 &&
-    hist[i] > 0 &&
-    hist[i - 1] <= 0
-  )
-}
-
-function sigEmaCross(candles: Candle[]): boolean[] {
-  const closes = candles.map(c => c.close)
-  const e21 = ema(closes, 21)
-  const e55 = ema(closes, 55)
-  return candles.map((_, i) =>
-    i >= 55 &&
-    e21[i] > e55[i] &&
-    e21[i - 1] <= e55[i - 1]
-  )
-}
-
-function sigBollinger(candles: Candle[]): boolean[] {
-  const closes = candles.map(c => c.close)
-  const { upper, bwidth } = bollinger(closes, 20, 2)
-  // Squeeze = bwidth below its 20th percentile
-  const sqThresh = percentile(bwidth.filter(v => v < 999), 20)
-  return candles.map((_, i) => {
-    if (i < 21) return false
-    const wasSqueezing = bwidth[i - 1] <= sqThresh
-    const breakout = closes[i] > upper[i - 1]
-    return wasSqueezing && breakout && closes[i] > closes[i - 1]
-  })
-}
-
-function sigVwap(candles: Candle[]): boolean[] {
-  const vw = vwap(candles)
-  return candles.map((_, i) => {
-    if (i < 2) return false
-    const c = candles[i]
-    const below = c.close < vw[i] * 0.9975       // 0.25% below VWAP
-    const bouncing = c.close > candles[i - 1].close
-    const momentum = c.close > c.open
-    return below && bouncing && momentum
-  })
-}
-
-function sigSupportResistance(candles: Candle[]): boolean[] {
-  const LOOKBACK = 20
-  const TOL = 0.004  // 0.4% tolerance
-  return candles.map((_, i) => {
-    if (i < LOOKBACK + 1) return false
-    const window = candles.slice(i - LOOKBACK, i)
-    const support = Math.min(...window.map(c => c.low))
-    const c = candles[i]
-    const nearSupport = Math.abs(c.low - support) / support < TOL
-    return nearSupport && c.close > c.open && c.close > candles[i - 1].close
-  })
-}
-
-function sigIchimoku(candles: Candle[]): boolean[] {
-  const { senkouA, senkouB } = ichimoku(candles)
-  return candles.map((_, i) => {
-    if (i < 52) return false
-    const kumoTop = Math.max(senkouA[i], senkouB[i])
-    const prevKumoTop = Math.max(senkouA[i - 1], senkouB[i - 1])
-    return candles[i].close > kumoTop && candles[i - 1].close <= prevKumoTop
-  })
-}
-
-function sigStochRsiVol(candles: Candle[]): boolean[] {
-  const closes = candles.map(c => c.close)
-  const volumes = candles.map(c => c.volume)
-  const { k } = stochRSI(closes, 14, 14)
-  const volSMA = sma(volumes, 20)
-  return candles.map((_, i) => {
-    if (i < 30) return false
-    const oversold = k[i] < 22
-    const rising   = k[i] > k[i - 1]
-    const highVol  = candles[i].volume > volSMA[i] * 1.5
-    return oversold && rising && highVol
-  })
-}
-
-function sigIctOrderBlock(candles: Candle[]): boolean[] {
-  // Order Block: previous strong bearish bar followed by bullish FVG
-  // FVG = gap between current low and 2 bars ago high
-  return candles.map((_, i) => {
-    if (i < 3) return false
-    const prev2 = candles[i - 2]
-    const prev1 = candles[i - 1]
-    const curr  = candles[i]
-    // Bearish order block at prev1
-    const bearishOB = prev1.open > prev1.close &&
-      (prev1.open - prev1.close) / prev1.open > 0.003
-    // Bullish FVG: curr.low > prev2.high (gap up)
-    const fvg = curr.low > prev2.high
-    // Price now bullish closing above order block
-    const bullishClose = curr.close > prev1.open
-    return bearishOB && fvg && bullishClose
-  })
-}
-
-function sigFibonacci(candles: Candle[]): boolean[] {
-  const SWING = 50
-  const TOL = 0.005  // 0.5% tolerance
-  return candles.map((_, i) => {
-    if (i < SWING + 1) return false
-    const window = candles.slice(i - SWING, i)
-    const swingHigh = Math.max(...window.map(c => c.high))
-    const swingLow  = Math.min(...window.map(c => c.low))
-    const range = swingHigh - swingLow
-    if (range < swingLow * 0.02) return false  // skip tiny ranges
-    const fib618 = swingHigh - range * 0.618
-    const c = candles[i]
-    const nearFib = Math.abs(c.close - fib618) / fib618 < TOL
-    return nearFib && c.close > c.open && c.close > candles[i - 1].close
-  })
-}
-
-function sigVolumeMomentum(candles: Candle[]): boolean[] {
-  const volumes = candles.map(c => c.volume)
-  const closes  = candles.map(c => c.close)
-  const volSMA  = sma(volumes, 20)
-  const highSMA = sma(candles.map(c => c.high), 20)
-  return candles.map((_, i) => {
-    if (i < 21) return false
-    const c = candles[i]
-    const volSpike   = c.volume > volSMA[i] * 2.0
-    const bullishBar = c.close > c.open
-    const breakout   = c.high > highSMA[i - 1]  // break above 20-bar high avg
-    const momentum   = closes[i] > closes[i - 1] * 1.002
-    return volSpike && bullishBar && breakout && momentum
-  })
-}
-
-// ── Strategy Registry ─────────────────────────────────────────
-
-export type StrategyDef = {
-  name: string
-  label: string
-  signals: (candles: Candle[]) => boolean[]
-}
-
-export const STRATEGY_DEFS: StrategyDef[] = [
-  { name: 'rsi_macd',            label: 'RSI + MACD',                signals: sigRsiMacd        },
-  { name: 'ema_crossover',       label: 'EMA 21/55 Crossover',       signals: sigEmaCross       },
-  { name: 'bollinger_squeeze',   label: 'Bollinger Band Squeeze',     signals: sigBollinger      },
-  { name: 'vwap_mean_reversion', label: 'VWAP Mean Reversion',        signals: sigVwap           },
-  { name: 'support_resistance',  label: 'S/R Bounce',                 signals: sigSupportResistance },
-  { name: 'ichimoku',            label: 'Ichimoku Cloud',             signals: sigIchimoku       },
-  { name: 'stoch_rsi_volume',    label: 'Stoch RSI + Volume',         signals: sigStochRsiVol    },
-  { name: 'ict_order_block',     label: 'ICT Order Block + FVG',      signals: sigIctOrderBlock  },
-  { name: 'fibonacci',           label: 'Fibonacci Retracement',      signals: sigFibonacci      },
-  { name: 'volume_momentum',     label: 'Volume-Momentum Breakout',   signals: sigVolumeMomentum },
-]
-
-// ── Main Export: run all strategies on a coin's candles ───────
+// ── Public API ────────────────────────────────────────────────
 
 export function runAllStrategies(candles: Candle[]): StrategyResult[] {
   if (candles.length < 100) return []
 
-  return STRATEGY_DEFS.map(def => {
+  const cache = buildCache(candles)
+  const results: StrategyResult[] = []
+
+  for (const { name, label, fn } of STRATEGIES) {
     try {
-      const signals = def.signals(candles)
-      const { winRate, totalPnl, mdd, trades, tp, tp2, sl } = bestParams(candles, signals)
-      return {
-        name:             def.name,
-        label:            def.label,
-        win_rate:         winRate,
-        total_pnl_pct:    totalPnl,
-        max_drawdown_pct: mdd,
-        total_trades:     trades,
-        tp_pct:           tp,
-        tp2_pct:          tp2,
-        sl_pct:           sl,
-      }
+      const r = optimiseStrategy(candles, fn, cache)
+      results.push(
+        r
+          ? { ...r, name, label }
+          : { name, label, win_rate: 0, total_pnl_pct: 0, max_drawdown_pct: 100, total_trades: 0, tp_pct: 2, tp2_pct: 4, sl_pct: 1.5 }
+      )
     } catch {
-      return {
-        name: def.name, label: def.label,
-        win_rate: 0, total_pnl_pct: 0, max_drawdown_pct: 100,
-        total_trades: 0, tp_pct: 2, tp2_pct: 4, sl_pct: 1.5,
-      }
+      results.push({ name, label, win_rate: 0, total_pnl_pct: 0, max_drawdown_pct: 100, total_trades: 0, tp_pct: 2, tp2_pct: 4, sl_pct: 1.5 })
     }
-  })
+  }
+
+  return results
 }
 
-// ── Pick Best: highest PnL with MDD < 20% ─────────────────────
-
 export function pickBest(results: StrategyResult[]): StrategyResult | null {
-  const valid = results.filter(r => r.total_trades >= 5 && r.max_drawdown_pct < 20)
+  const valid = results.filter(r => r.total_trades >= 3 && r.max_drawdown_pct < 20)
   if (!valid.length) return results.sort((a, b) => b.total_pnl_pct - a.total_pnl_pct)[0] ?? null
   return valid.sort((a, b) => b.total_pnl_pct - a.total_pnl_pct)[0]
 }
