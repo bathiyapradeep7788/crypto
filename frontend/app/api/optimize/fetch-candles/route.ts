@@ -13,7 +13,7 @@ const supabase = createClient(
 )
 
 const BINANCE       = 'https://data-api.binance.vision'
-const FIVE_MONTHS   = 5 * 30 * 24 * 60 * 60 * 1000   // ~150 days in ms
+const FIVE_MONTHS   = 6 * 30 * 24 * 60 * 60 * 1000   // ~180 days in ms
 
 export async function GET(req: NextRequest) {
   const sp    = req.nextUrl.searchParams
