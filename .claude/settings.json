@@ -1,16 +1,20 @@
 ﻿{
-    "permissions":  {
-                        "defaultMode":  "bypassPermissions",
-                        "allow":  [
-                                      "Bash(*)",
-                                      "Edit(*)",
-                                      "Write(*)",
-                                      "Read(*)",
-                                      "Glob(*)",
-                                      "Grep(*)",
-                                      "WebFetch(*)",
-                                      "WebSearch(*)",
-                                      "mcp__*"
-                                  ]
-                    }
+    "permissions": {
+        "defaultMode": "bypassPermissions",
+        "allow": [
+            "Bash(*)",
+            "PowerShell(*)",
+            "Edit(*)",
+            "Write(*)",
+            "Read(*)",
+            "Glob(*)",
+            "Grep(*)",
+            "WebFetch(*)",
+            "WebSearch(*)",
+            "mcp__*",
+            "Agent(*)",
+            "TodoWrite",
+            "TodoRead"
+        ]
+    }
 }

@@ -78,16 +78,7 @@ Open http://localhost:3000 in your browser.
 
 ---
 
-## DEPLOY TO VERCEL + RENDER
-
-### Backend → Render
-1. Push code to GitHub (see below)
-2. Go to https://render.com → New → Web Service
-3. Connect your GitHub repo, select the `backend` folder
-4. Build command: `pip install -r requirements.txt`
-5. Start command: `uvicorn app.main:app --host 0.0.0.0 --port 10000`
-6. Add environment variables (SUPABASE_URL, SUPABASE_KEY)
-7. Deploy — Render gives you a URL like `https://algo-backend.onrender.com`
+## DEPLOY TO VERCEL
 
 ### Frontend → Vercel
 1. Go to https://vercel.com → New Project → Import from GitHub
