@@ -1,8 +1,9 @@
 # Python
 backend/venv/
-backend/__pycache__/
-backend/**/__pycache__/
-backend/**/*.pyc
+venv/
+__pycache__/
+**/__pycache__/
+**/*.pyc
 backend/.env
 
 # Node
@@ -18,5 +19,14 @@ Thumbs.db
 .vscode/
 .idea/
 
-# Private setup file — never push
+# ── SECRET FILES — NEVER COMMIT ──────────────────────────────
+.env
+.env.local
+.env.production
+.env.*.local
 SETUP_AND_KEYS.txt
+api_keys.txt
+vercel-token.txt
+push_to_github.bat
+*.token
+*.secret

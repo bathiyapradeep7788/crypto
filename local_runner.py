@@ -30,6 +30,23 @@ import asyncio
 import argparse
 from datetime import datetime, timezone
 
+# Force UTF-8 output on Windows to avoid cp1252 UnicodeEncodeError
+if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+if sys.stderr.encoding and sys.stderr.encoding.lower() != "utf-8":
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
+# Load .env file from project root (keeps secrets out of source code)
+from pathlib import Path
+_env_path = Path(__file__).parent / ".env"
+if _env_path.exists():
+    from dotenv import load_dotenv
+    load_dotenv(_env_path)
+else:
+    print(f"[WARNING] .env file not found at {_env_path}")
+    print("          Copy .env.example to .env and fill in your credentials.")
+    sys.exit(1)
+
 # ── Selenium ──────────────────────────────────────────────────────────────────
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
@@ -57,15 +74,10 @@ from app.services.trade_simulator import simulate_trade
 # CONFIG — edit these or pass as CLI args
 # ══════════════════════════════════════════════════════════════════════════════
 
-SUPABASE_URL = "https://llctmrzftfijdnixcffz.supabase.co"
-SUPABASE_KEY = (
-    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9"
-    ".eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxsY3RtcnpmdGZpamRuaXhjZmZ6Iiwicm9sZSI6"
-    "InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4MjE4NDUxMSwiZXhwIjoyMDk3NzYwNTExfQ"
-    ".4f14z9BdPeIfAU3Z490b_h5d69ilwY_gs5XSLtc7B20"
-)
+SUPABASE_URL = os.environ["SUPABASE_URL"]
+SUPABASE_KEY = os.environ["SUPABASE_KEY"]
 
-BINANCE_BASE  = "https://data-api.binance.vision"   # geo-unblocked mirror
+BINANCE_BASE  = os.getenv("BINANCE_BASE_URL", "https://data-api.binance.vision")
 DASHBOARD_URL = "https://algobot-frontend.vercel.app/dashboard"
 TV_BASE       = "https://www.tradingview.com/chart/?symbol=BINANCE:"
 

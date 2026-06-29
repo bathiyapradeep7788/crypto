@@ -33,7 +33,7 @@ services:
       - key: NEXT_PUBLIC_API_URL
         sync: false
       - key: NEXT_PUBLIC_SUPABASE_URL
-        value: https://llctmrzftfijdnixcffz.supabase.co
+        sync: false
       - key: NEXT_PUBLIC_SUPABASE_ANON_KEY
         sync: false
       - key: PORT
