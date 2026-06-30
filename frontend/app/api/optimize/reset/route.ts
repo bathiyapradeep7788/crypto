@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
     const { error: r1 } = await supabase
       .from('portfolio_optimization_results')
       .delete()
-      .gte('id', 0)
+      .neq('run_id', '__keep__')
     ops.push({ table: 'portfolio_optimization_results', error: r1?.message ?? null })
 
     const { error: r2 } = await supabase
