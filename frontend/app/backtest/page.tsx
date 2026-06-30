@@ -5,59 +5,38 @@ import CoinSelector from '@/components/backtest/CoinSelector'
 import StrategySelector from '@/components/backtest/StrategySelector'
 import StrategyParams from '@/components/backtest/StrategyParams'
 import ResultsTable from '@/components/backtest/ResultsTable'
-import OptimizationDashboard from '@/components/backtest/OptimizationDashboard'
-import PortfolioDashboard from '@/components/backtest/PortfolioDashboard'
 import { useBacktest } from '@/hooks/useBacktest'
-import { getBestPerCoin, optimizeAllCoins, OptimizeResult } from '@/lib/api'
-import { DEFAULT_PARAMS, INTERVALS, COINS, STRATEGY_LABELS } from '@/lib/constants'
+import { scanSignals } from '@/lib/api'
+import { DEFAULT_PARAMS, COINS, COIN_LABELS } from '@/lib/constants'
 import { useErrorToast } from '@/hooks/useErrorToast'
-
-type BestResult = {
-  coin: string
-  best_strategy: string
-  best_strategy_label: string
-  win_rate: number
-  total_pnl_pct: number
-  total_trades: number
-  all_strategies: { strategy: string; win_rate: number; total_pnl_pct: number; total_trades: number }[]
-}
 
 export default function BacktestPage() {
   const { run, status, progress, results, error } = useBacktest()
   const { addToast } = useErrorToast()
 
-  // Mode toggle
-  const [mode, setMode] = useState<'manual' | 'best' | 'optimize' | 'portfolio'>('manual')
+  const [mode, setMode] = useState<'manual' | 'scanner'>('manual')
 
-  // Manual mode state
+  // ── Manual mode ──
   const [coins,       setCoins]       = useState<string[]>(['BTCUSDT', 'ETHUSDT'])
   const [startDt,     setStartDt]     = useState('2024-01-01T00:00')
   const [endDt,       setEndDt]       = useState('2024-06-01T00:00')
-  const [interval,    setInterval]    = useState('15m')
   const [strategies,  setStrategies]  = useState<string[]>(['rsi_macd'])
   const [paramValues, setParamValues] = useState<Record<string, number>>({})
   const [tpPct,  setTpPct]  = useState(2.0)
   const [tp2Pct, setTp2Pct] = useState(4.0)
   const [slPct,  setSlPct]  = useState(1.5)
 
-  // Best-strategy mode state
-  const [bestCoins,    setBestCoins]    = useState<string[]>([...COINS])
-  const [bestStartDt,  setBestStartDt]  = useState('2024-01-01T00:00')
-  const [bestEndDt,    setBestEndDt]    = useState('2024-06-01T00:00')
-  const [bestInterval, setBestInterval] = useState('15m')
-  const [bestTpPct,    setBestTpPct]    = useState(2.0)
-  const [bestTp2Pct,   setBestTp2Pct]  = useState(4.0)
-  const [bestSlPct,    setBestSlPct]    = useState(1.5)
-  const [bestLoading,   setBestLoading]   = useState(false)
-  const [bestResults,   setBestResults]   = useState<BestResult[]>([])
-  const [bestProgress,  setBestProgress]  = useState({ done: 0, total: 0 })
-  const [expandedCoin,  setExpandedCoin]  = useState<string | null>(null)
-
-  // Optimize & Save mode state
-  const [optLoading,  setOptLoading]  = useState(false)
-  const [optResults,  setOptResults]  = useState<OptimizeResult[]>([])
-  const [optProgress, setOptProgress] = useState({ done: 0, total: 0 })
-  const [optSaved,    setOptSaved]    = useState(false)
+  // ── Signal Scanner mode ──
+  const [scanStartDt,  setScanStartDt]  = useState('2024-01-01T00:00')
+  const [scanEndDt,    setScanEndDt]    = useState('2024-06-01T00:00')
+  const [scanTpPct,    setScanTpPct]    = useState(2.0)
+  const [scanTp2Pct,   setScanTp2Pct]  = useState(4.0)
+  const [scanSlPct,    setScanSlPct]    = useState(1.5)
+  const [scanCoins,    setScanCoins]    = useState<string[]>([...COINS])
+  const [scanRunning,  setScanRunning]  = useState(false)
+  const [scanProgress, setScanProgress] = useState({ done: 0, total: 0 })
+  const [scanResults,  setScanResults]  = useState<{ coin: string; found: number; error?: string }[]>([])
+  const [scanDone,     setScanDone]     = useState(false)
 
   const soloBuiltIn =
     strategies.length === 1 && !strategies[0].startsWith('combo_') ? strategies[0] : null
@@ -71,60 +50,49 @@ export default function BacktestPage() {
   }
 
   const handleRun = () => {
-    if (!coins.length) return alert('Select at least one coin')
+    if (!coins.length)      return alert('Select at least one coin')
     if (!strategies.length) return alert('Select at least one strategy')
-    run({ coins, start_dt: new Date(startDt).toISOString(), end_dt: new Date(endDt).toISOString(),
-      strategies, params: buildParams(), tp_pct: tpPct, tp2_pct: tp2Pct, sl_pct: slPct, interval })
+    run({
+      coins,
+      start_dt:   new Date(startDt).toISOString(),
+      end_dt:     new Date(endDt).toISOString(),
+      strategies,
+      params:     buildParams(),
+      tp_pct:     tpPct,
+      tp2_pct:    tp2Pct,
+      sl_pct:     slPct,
+      interval:   '15m',
+    })
   }
 
-  const handleBestRun = async (allCoins: boolean) => {
-    const coinsToRun = allCoins ? [...COINS] : bestCoins
-    if (!coinsToRun.length) { addToast('Select at least one coin', 'warning'); return }
-    setBestLoading(true)
-    setBestResults([])
-    setBestProgress({ done: 0, total: coinsToRun.length })
-    try {
-      const data = await getBestPerCoin({
-        coins:    coinsToRun,
-        start_dt: new Date(bestStartDt).toISOString(),
-        end_dt:   new Date(bestEndDt).toISOString(),
-        interval: bestInterval,
-        tp_pct:   bestTpPct,
-        tp2_pct:  bestTp2Pct,
-        sl_pct:   bestSlPct,
-        onProgress: (done, total, result) => {
-          setBestProgress({ done, total })
-          setBestResults(prev => [...prev, result])
-        },
-      })
-      if (data.results.some((r: any) => r.error)) {
-        addToast('Some coins had errors — check results', 'warning')
+  const handleScan = async () => {
+    if (!scanCoins.length) { addToast('Select at least one coin', 'warning'); return }
+    setScanRunning(true)
+    setScanResults([])
+    setScanDone(false)
+    setScanProgress({ done: 0, total: scanCoins.length })
+
+    for (let i = 0; i < scanCoins.length; i++) {
+      const coin = scanCoins[i]
+      try {
+        const r = await scanSignals({
+          coin,
+          start_dt: new Date(scanStartDt).toISOString(),
+          end_dt:   new Date(scanEndDt).toISOString(),
+          tp_pct:   scanTpPct,
+          tp2_pct:  scanTp2Pct,
+          sl_pct:   scanSlPct,
+        })
+        setScanResults(prev => [...prev, { coin, found: r.signals_found }])
+      } catch (e: any) {
+        setScanResults(prev => [...prev, { coin, found: 0, error: e.message }])
       }
-    } catch (e: any) { addToast(`Best-strategy error: ${e.message}`, 'error') }
-    setBestLoading(false)
-  }
+      setScanProgress({ done: i + 1, total: scanCoins.length })
+    }
 
-  const handleOptimizeSave = async () => {
-    const coinsToRun = [...COINS]
-    setOptLoading(true)
-    setOptResults([])
-    setOptSaved(false)
-    setOptProgress({ done: 0, total: coinsToRun.length })
-    try {
-      await optimizeAllCoins({
-        coins:    coinsToRun,
-        start_dt: new Date(bestStartDt).toISOString(),
-        end_dt:   new Date(bestEndDt).toISOString(),
-        interval: bestInterval,
-        save:     true,
-        onProgress: (done, total, result) => {
-          setOptProgress({ done, total })
-          setOptResults(prev => [...prev, result])
-        },
-      })
-      setOptSaved(true)
-    } catch (e: any) { addToast(`Optimise error: ${e.message}`, 'error') }
-    setOptLoading(false)
+    setScanRunning(false)
+    setScanDone(true)
+    addToast('Signal scan complete — view results on Dashboard', 'info')
   }
 
   const isRunning = status === 'running'
@@ -136,7 +104,7 @@ export default function BacktestPage() {
         <div className="flex items-center justify-between mb-6">
           <div>
             <h1 className="text-xl font-bold text-white">Backtest Bot</h1>
-            <p className="text-xs text-gray-500 mt-0.5">Simulate strategies against historical Binance data</p>
+            <p className="text-xs text-gray-500 mt-0.5">Simulate strategies on historical Binance 15m data</p>
           </div>
           <div className="flex items-center gap-2">
             {isRunning && (
@@ -148,23 +116,14 @@ export default function BacktestPage() {
                 {progress.processed}/{progress.total} runs…
               </div>
             )}
-            {/* Mode toggle */}
             <div className="flex rounded-lg overflow-hidden border border-surface-border">
               <button onClick={() => setMode('manual')}
                 className={`text-xs px-4 py-2 font-medium transition-colors ${mode==='manual' ? 'bg-brand text-black' : 'bg-surface-card text-gray-400 hover:text-white'}`}>
                 Manual
               </button>
-              <button onClick={() => setMode('best')}
-                className={`text-xs px-4 py-2 font-medium transition-colors ${mode==='best' ? 'bg-brand text-black' : 'bg-surface-card text-gray-400 hover:text-white'}`}>
-                ⭐ Find Best
-              </button>
-              <button onClick={() => setMode('optimize')}
-                className={`text-xs px-4 py-2 font-medium transition-colors ${mode==='optimize' ? 'bg-gradient-to-r from-brand to-blue-500 text-black' : 'bg-surface-card text-gray-400 hover:text-white'}`}>
-                🚀 Optimization
-              </button>
-              <button onClick={() => setMode('portfolio')}
-                className={`text-xs px-4 py-2 font-medium transition-colors ${mode==='portfolio' ? 'bg-gradient-to-r from-purple-600 to-blue-600 text-white' : 'bg-surface-card text-gray-400 hover:text-white'}`}>
-                🏛 Portfolio
+              <button onClick={() => setMode('scanner')}
+                className={`text-xs px-4 py-2 font-medium transition-colors ${mode==='scanner' ? 'bg-gradient-to-r from-brand to-blue-500 text-black' : 'bg-surface-card text-gray-400 hover:text-white'}`}>
+                📡 Signal Scanner
               </button>
             </div>
           </div>
@@ -175,7 +134,7 @@ export default function BacktestPage() {
           <div className="grid grid-cols-12 gap-4">
             <div className="col-span-4 space-y-4">
               <div className="bg-surface-card border border-surface-border rounded-lg p-4 space-y-3">
-                <h3 className="text-sm font-semibold text-gray-300">Date Range</h3>
+                <h3 className="text-sm font-semibold text-gray-300">Date Range · 15m fixed</h3>
                 {[{label:'Start',value:startDt,set:setStartDt},{label:'End',value:endDt,set:setEndDt}].map(({label,value,set}) => (
                   <div key={label}>
                     <label className="block text-xs text-gray-500 mb-1">{label}</label>
@@ -183,26 +142,26 @@ export default function BacktestPage() {
                       className="w-full bg-surface border border-surface-border rounded px-3 py-1.5 text-sm text-white focus:outline-none focus:border-brand" />
                   </div>
                 ))}
-                <div>
-                  <label className="block text-xs text-gray-500 mb-1">Interval</label>
-                  <select value={interval} onChange={e => setInterval(e.target.value)}
-                    className="w-full bg-surface border border-surface-border rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-brand">
-                    {INTERVALS.map(i => <option key={i.value} value={i.value}>{i.label}</option>)}
-                  </select>
-                </div>
+                <p className="text-[10px] text-gray-600 border border-surface-border rounded px-2 py-1">
+                  Timeframe: <span className="text-brand font-semibold">15m (locked)</span>
+                </p>
               </div>
               <CoinSelector selected={coins} onChange={setCoins} />
             </div>
 
             <div className="col-span-8 space-y-4">
               <StrategySelector selected={strategies} onChange={setStrategies} />
-              {!soloBuiltIn && (
-                <p className="text-xs text-gray-500 italic px-1">
-                  {strategies.length > 1 ? `Running ${strategies.length} strategies — each uses standard parameters.` : 'Combined/multiple — standard parameters used.'}
-                </p>
-              )}
-              <StrategyParams strategyId={soloBuiltIn??''} values={paramValues} onChange={setParam}
-                tpPct={tpPct} tp2Pct={tp2Pct} slPct={slPct} onTp={setTpPct} onTp2={setTp2Pct} onSl={setSlPct} />
+              <StrategyParams
+                strategyId={soloBuiltIn ?? ''}
+                values={paramValues}
+                onChange={setParam}
+                tpPct={tpPct}
+                tp2Pct={tp2Pct}
+                slPct={slPct}
+                onTp={setTpPct}
+                onTp2={setTp2Pct}
+                onSl={setSlPct}
+              />
               {error && (
                 <div className="bg-red-900/20 border border-red-800 rounded-lg px-4 py-3 text-sm text-red-400">{error}</div>
               )}
@@ -215,244 +174,145 @@ export default function BacktestPage() {
           </div>
         )}
 
-        {/* ── FIND BEST STRATEGY MODE ── */}
-        {mode === 'best' && (
+        {/* ── SIGNAL SCANNER MODE ── */}
+        {mode === 'scanner' && (
           <div className="space-y-4">
-            {/* Config row */}
-            <div className="bg-surface-card border border-surface-border rounded-lg p-4 grid grid-cols-7 gap-3 items-end">
-              <div>
-                <label className="block text-xs text-gray-500 mb-1">Start</label>
-                <input type="datetime-local" value={bestStartDt} onChange={e => setBestStartDt(e.target.value)}
-                  className="w-full bg-surface border border-surface-border rounded px-2 py-1.5 text-sm text-white focus:outline-none focus:border-brand" />
+            {/* Config */}
+            <div className="bg-surface-card border border-surface-border rounded-lg p-4">
+              <h3 className="text-sm font-semibold text-gray-300 mb-3">Scan Configuration</h3>
+              <div className="grid grid-cols-6 gap-3 items-end">
+                <div className="col-span-2">
+                  <label className="block text-xs text-gray-500 mb-1">Start Date</label>
+                  <input type="datetime-local" value={scanStartDt} onChange={e => setScanStartDt(e.target.value)}
+                    className="w-full bg-surface border border-surface-border rounded px-2 py-1.5 text-sm text-white focus:outline-none focus:border-brand" />
+                </div>
+                <div className="col-span-2">
+                  <label className="block text-xs text-gray-500 mb-1">End Date</label>
+                  <input type="datetime-local" value={scanEndDt} onChange={e => setScanEndDt(e.target.value)}
+                    className="w-full bg-surface border border-surface-border rounded px-2 py-1.5 text-sm text-white focus:outline-none focus:border-brand" />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">Timeframe</label>
+                  <div className="bg-surface border border-brand/50 rounded px-2 py-1.5 text-sm text-brand font-semibold text-center">
+                    15m (locked)
+                  </div>
+                </div>
+                <div className="flex flex-col gap-2">
+                  <button onClick={handleScan} disabled={scanRunning}
+                    className={`py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                      scanRunning
+                        ? 'bg-surface-border text-gray-500 cursor-not-allowed'
+                        : 'bg-brand hover:bg-brand-dark text-black'
+                    }`}>
+                    {scanRunning
+                      ? `⟳ Scanning ${scanProgress.done}/${scanProgress.total}…`
+                      : '📡 Scan Signals'}
+                  </button>
+                  {scanDone && (
+                    <a href="/dashboard"
+                      className="text-center py-1.5 rounded-lg text-xs font-semibold bg-green-700/30 border border-green-700/50 text-green-400 hover:bg-green-700/50 transition-colors">
+                      View Dashboard →
+                    </a>
+                  )}
+                </div>
               </div>
-              <div>
-                <label className="block text-xs text-gray-500 mb-1">End</label>
-                <input type="datetime-local" value={bestEndDt} onChange={e => setBestEndDt(e.target.value)}
-                  className="w-full bg-surface border border-surface-border rounded px-2 py-1.5 text-sm text-white focus:outline-none focus:border-brand" />
-              </div>
-              <div>
-                <label className="block text-xs text-gray-500 mb-1">Interval</label>
-                <select value={bestInterval} onChange={e => setBestInterval(e.target.value)}
-                  className="w-full bg-surface border border-surface-border rounded px-2 py-1.5 text-sm text-white focus:outline-none focus:border-brand">
-                  {INTERVALS.map(i => <option key={i.value} value={i.value}>{i.label}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs text-gray-500 mb-1">TP1%</label>
-                <input type="number" step="0.5" value={bestTpPct} onChange={e => setBestTpPct(parseFloat(e.target.value))}
-                  className="w-full bg-surface border border-surface-border rounded px-2 py-1.5 text-sm text-white focus:outline-none focus:border-brand" />
-              </div>
-              <div>
-                <label className="block text-xs text-gray-500 mb-1">TP2%</label>
-                <input type="number" step="0.5" value={bestTp2Pct} onChange={e => setBestTp2Pct(parseFloat(e.target.value))}
-                  className="w-full bg-surface border border-surface-border rounded px-2 py-1.5 text-sm text-white focus:outline-none focus:border-brand" />
-              </div>
-              <div>
-                <label className="block text-xs text-gray-500 mb-1">SL%</label>
-                <input type="number" step="0.5" value={bestSlPct} onChange={e => setBestSlPct(parseFloat(e.target.value))}
-                  className="w-full bg-surface border border-surface-border rounded px-2 py-1.5 text-sm text-white focus:outline-none focus:border-brand" />
-              </div>
-              <div className="flex flex-col gap-2">
-                <button onClick={() => handleBestRun(true)} disabled={bestLoading || optLoading}
-                  className={`py-1.5 rounded-lg text-xs font-semibold transition-all ${bestLoading ? 'bg-surface-border text-gray-500 cursor-not-allowed' : 'bg-brand hover:bg-brand-dark text-black'}`}>
-                  {bestLoading ? '⟳ Running…' : '⭐ Preview All 20'}
-                </button>
-                <button onClick={handleOptimizeSave} disabled={bestLoading || optLoading}
-                  className={`py-1.5 rounded-lg text-xs font-semibold transition-all ${optLoading ? 'bg-surface-border text-gray-500 cursor-not-allowed' : 'bg-green-700 hover:bg-green-600 text-white'}`}>
-                  {optLoading ? `⟳ Optimising… ${optProgress.done}/${optProgress.total}` : '💾 Optimise & Save All'}
-                </button>
-                <button onClick={() => handleBestRun(false)} disabled={bestLoading || optLoading}
-                  className="py-1.5 rounded-lg text-xs font-semibold bg-surface-card border border-surface-border text-gray-300 hover:text-white transition-all">
-                  Selected Coins
-                </button>
+
+              {/* TP/SL params */}
+              <div className="grid grid-cols-3 gap-3 mt-3 pt-3 border-t border-surface-border">
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">TP1 %</label>
+                  <input type="number" step="0.5" value={scanTpPct} onChange={e => setScanTpPct(parseFloat(e.target.value))}
+                    className="w-full bg-surface border border-surface-border rounded px-2 py-1.5 text-sm text-white focus:outline-none focus:border-brand" />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">TP2 %</label>
+                  <input type="number" step="0.5" value={scanTp2Pct} onChange={e => setScanTp2Pct(parseFloat(e.target.value))}
+                    className="w-full bg-surface border border-surface-border rounded px-2 py-1.5 text-sm text-white focus:outline-none focus:border-brand" />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">SL %</label>
+                  <input type="number" step="0.5" value={scanSlPct} onChange={e => setScanSlPct(parseFloat(e.target.value))}
+                    className="w-full bg-surface border border-surface-border rounded px-2 py-1.5 text-sm text-white focus:outline-none focus:border-brand" />
+                </div>
               </div>
             </div>
 
-            {/* Coin selector for selected-coins run */}
+            {/* Coin selector */}
             <div className="bg-surface-card border border-surface-border rounded-lg p-4">
               <div className="flex items-center justify-between mb-2">
-                <h3 className="text-sm font-semibold text-gray-300">Coins for "Selected" run ({bestCoins.length})</h3>
+                <h3 className="text-sm font-semibold text-gray-300">Coins to Scan ({scanCoins.length} / {COINS.length})</h3>
                 <div className="flex gap-2">
-                  <button onClick={() => setBestCoins([...COINS])} className="text-xs text-brand hover:underline">All</button>
-                  <button onClick={() => setBestCoins([])} className="text-xs text-gray-500 hover:text-white">None</button>
+                  <button onClick={() => setScanCoins([...COINS])} className="text-xs text-brand hover:underline">All</button>
+                  <button onClick={() => setScanCoins([])}         className="text-xs text-gray-500 hover:text-white">None</button>
                 </div>
               </div>
-              <div className="flex flex-wrap gap-1">
+              <div className="flex flex-wrap gap-1.5">
                 {COINS.map(c => (
-                  <button key={c} onClick={() => setBestCoins(p => p.includes(c) ? p.filter(x=>x!==c) : [...p,c])}
-                    className={`text-xs px-2 py-1 rounded transition-colors ${bestCoins.includes(c) ? 'bg-brand/20 text-brand border border-brand/30' : 'bg-surface text-gray-500 border border-surface-border hover:text-gray-300'}`}>
-                    {c.replace('USDT','')}
+                  <button key={c}
+                    onClick={() => setScanCoins(prev => prev.includes(c) ? prev.filter(x => x !== c) : [...prev, c])}
+                    className={`text-xs px-3 py-1 rounded-full transition-colors ${
+                      scanCoins.includes(c)
+                        ? 'bg-brand/20 text-brand border border-brand/30'
+                        : 'bg-surface text-gray-500 border border-surface-border hover:text-gray-300'
+                    }`}>
+                    {COIN_LABELS[c] ?? c.replace('USDT', '')}
                   </button>
                 ))}
               </div>
             </div>
 
-            {/* Best results table */}
-            {bestLoading && (
-              <div className="bg-surface-card border border-surface-border rounded-lg p-6">
+            {/* Progress bar */}
+            {scanRunning && (
+              <div className="bg-surface-card border border-surface-border rounded-lg p-5">
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm text-gray-300">Running 10 strategies per coin…</span>
-                  <span className="text-sm font-semibold text-brand">{bestProgress.done} / {bestProgress.total} coins</span>
+                  <span className="text-sm text-gray-300">Scanning candles for signals…</span>
+                  <span className="text-sm font-semibold text-brand">{scanProgress.done} / {scanProgress.total}</span>
                 </div>
                 <div className="w-full bg-surface rounded-full h-2">
                   <div className="bg-brand h-2 rounded-full transition-all duration-300"
-                    style={{ width: bestProgress.total ? `${bestProgress.done / bestProgress.total * 100}%` : '0%' }} />
-                </div>
-                <p className="text-xs text-gray-600 mt-2">Each coin runs sequentially to avoid timeout. Please wait…</p>
-              </div>
-            )}
-
-            {bestResults.length > 0 && (
-              <div className="bg-surface-card border border-surface-border rounded-lg overflow-hidden">
-                <div className="px-4 py-3 border-b border-surface-border">
-                  <h3 className="text-sm font-semibold text-gray-300">Best Strategy Per Coin</h3>
-                </div>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-xs">
-                    <thead className="text-gray-500 border-b border-surface-border">
-                      <tr>
-                        <th className="px-3 py-2 text-left font-medium">Coin</th>
-                        <th className="px-3 py-2 text-left font-medium">Best Strategy</th>
-                        <th className="px-3 py-2 text-left font-medium">Win Rate</th>
-                        <th className="px-3 py-2 text-left font-medium">Total PnL</th>
-                        <th className="px-3 py-2 text-left font-medium">Trades</th>
-                        <th className="px-3 py-2 text-left font-medium">Details</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {bestResults.map(r => (
-                        <>
-                          <tr key={r.coin} className="border-b border-surface-border hover:bg-surface-hover">
-                            <td className="px-3 py-2 text-blue-400 font-semibold font-mono">{r.coin.replace('USDT','')}</td>
-                            <td className="px-3 py-2 text-brand font-medium">{r.best_strategy_label}</td>
-                            <td className="px-3 py-2 text-white font-semibold">{r.win_rate.toFixed(1)}%</td>
-                            <td className={`px-3 py-2 font-semibold font-mono ${r.total_pnl_pct>=0?'text-green-400':'text-red-400'}`}>
-                              {r.total_pnl_pct>=0?'+':''}{r.total_pnl_pct.toFixed(2)}%
-                            </td>
-                            <td className="px-3 py-2 text-gray-400">{r.total_trades}</td>
-                            <td className="px-3 py-2">
-                              <button onClick={() => setExpandedCoin(expandedCoin===r.coin ? null : r.coin)}
-                                className="text-xs text-gray-500 hover:text-brand transition-colors">
-                                {expandedCoin===r.coin ? '▲ Hide' : '▼ All strategies'}
-                              </button>
-                            </td>
-                          </tr>
-                          {expandedCoin === r.coin && (
-                            <tr key={`${r.coin}-exp`} className="border-b border-surface-border bg-surface">
-                              <td colSpan={6} className="px-6 py-3">
-                                <table className="w-full text-xs">
-                                  <thead>
-                                    <tr className="text-gray-600">
-                                      <th className="text-left pb-1 pr-4">Strategy</th>
-                                      <th className="text-left pb-1 pr-4">Win Rate</th>
-                                      <th className="text-left pb-1 pr-4">PnL%</th>
-                                      <th className="text-left pb-1">Trades</th>
-                                    </tr>
-                                  </thead>
-                                  <tbody>
-                                    {r.all_strategies.sort((a,b) => b.win_rate - a.win_rate).map(s => (
-                                      <tr key={s.strategy} className={s.strategy===r.best_strategy ? 'text-brand' : 'text-gray-500'}>
-                                        <td className="pr-4 py-0.5">{STRATEGY_LABELS[s.strategy] ?? s.strategy}{s.strategy===r.best_strategy?' ⭐':''}</td>
-                                        <td className="pr-4">{s.win_rate.toFixed(1)}%</td>
-                                        <td className={`pr-4 ${s.total_pnl_pct>=0?'text-green-500':'text-red-500'}`}>{s.total_pnl_pct>=0?'+':''}{s.total_pnl_pct.toFixed(2)}%</td>
-                                        <td>{s.total_trades}</td>
-                                      </tr>
-                                    ))}
-                                  </tbody>
-                                </table>
-                              </td>
-                            </tr>
-                          )}
-                        </>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* ── OPTIMIZATION DASHBOARD MODE ── */}
-        {mode === 'optimize' && <OptimizationDashboard />}
-
-        {/* ── INSTITUTIONAL PORTFOLIO MODE ── */}
-        {mode === 'portfolio' && <PortfolioDashboard />}
-
-        {/* ── OPTIMISE & SAVE RESULTS ── */}
-        {(optLoading || optResults.length > 0) && mode === 'best' && (
-          <div className="space-y-3 mt-4">
-            {optLoading && (
-              <div className="bg-surface-card border border-surface-border rounded-lg p-5">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm text-gray-300">Optimising + saving to DB…</span>
-                  <span className="text-sm font-semibold text-green-400">
-                    {optProgress.done} / {optProgress.total} coins
-                  </span>
-                </div>
-                <div className="w-full bg-surface rounded-full h-2">
-                  <div className="bg-green-500 h-2 rounded-full transition-all duration-300"
-                    style={{ width: optProgress.total ? `${optProgress.done / optProgress.total * 100}%` : '0%' }} />
+                    style={{ width: scanProgress.total ? `${(scanProgress.done / scanProgress.total) * 100}%` : '0%' }} />
                 </div>
                 <p className="text-xs text-gray-600 mt-2">
-                  Each coin: all 10 strategies + TP/SL grid search + saving to DB
+                  Each coin scanned individually to stay within serverless limits. Please wait…
                 </p>
               </div>
             )}
 
-            {optResults.length > 0 && (
+            {/* Scan results summary */}
+            {scanResults.length > 0 && (
               <div className="bg-surface-card border border-surface-border rounded-lg overflow-hidden">
                 <div className="px-4 py-3 border-b border-surface-border flex items-center justify-between">
-                  <h3 className="text-sm font-semibold text-gray-300">
-                    Optimised Results {optSaved && <span className="text-green-400 ml-2 text-xs">✓ Saved to DB</span>}
-                  </h3>
-                  {optSaved && (
-                    <a href="/dashboard"
-                      className="text-xs px-3 py-1 bg-green-700/30 border border-green-700/50 rounded text-green-400 hover:bg-green-700/50 transition-colors">
-                      View Dashboard →
-                    </a>
-                  )}
+                  <h3 className="text-sm font-semibold text-gray-300">Scan Results</h3>
+                  <span className="text-xs text-gray-500">
+                    {scanResults.reduce((s, r) => s + r.found, 0)} total signals logged
+                  </span>
                 </div>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-xs">
-                    <thead className="text-gray-500 border-b border-surface-border">
-                      <tr>
-                        <th className="px-3 py-2 text-left font-medium">Coin</th>
-                        <th className="px-3 py-2 text-left font-medium">Best Strategy</th>
-                        <th className="px-3 py-2 text-left font-medium">TP1 / TP2 / SL</th>
-                        <th className="px-3 py-2 text-left font-medium">Win Rate</th>
-                        <th className="px-3 py-2 text-left font-medium">Total PnL</th>
-                        <th className="px-3 py-2 text-left font-medium">Trades</th>
+                <table className="w-full text-xs">
+                  <thead className="text-gray-500 border-b border-surface-border bg-surface">
+                    <tr>
+                      <th className="px-4 py-2 text-left font-medium">Coin</th>
+                      <th className="px-4 py-2 text-left font-medium">Signals Found</th>
+                      <th className="px-4 py-2 text-left font-medium">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {scanResults.map(r => (
+                      <tr key={r.coin} className="border-b border-surface-border hover:bg-surface-hover">
+                        <td className="px-4 py-2 text-blue-400 font-bold font-mono">
+                          {COIN_LABELS[r.coin] ?? r.coin.replace('USDT', '')}
+                        </td>
+                        <td className="px-4 py-2 text-white font-semibold">{r.found}</td>
+                        <td className="px-4 py-2">
+                          {r.error ? (
+                            <span className="text-red-400">✗ {r.error}</span>
+                          ) : (
+                            <span className="text-green-400">✓ Logged</span>
+                          )}
+                        </td>
                       </tr>
-                    </thead>
-                    <tbody>
-                      {optResults.map(r => (
-                        <tr key={r.coin} className="border-b border-surface-border hover:bg-surface-hover">
-                          <td className="px-3 py-2 text-blue-400 font-semibold font-mono">
-                            {r.coin.replace('USDT', '')}
-                          </td>
-                          <td className="px-3 py-2 text-brand">
-                            {r.error ? <span className="text-red-400">{r.error}</span> : r.best_strategy_label}
-                          </td>
-                          <td className="px-3 py-2 text-gray-400 font-mono">
-                            {r.optimized_params
-                              ? `${r.optimized_params.tp_pct} / ${r.optimized_params.tp2_pct} / ${r.optimized_params.sl_pct}`
-                              : '—'}
-                          </td>
-                          <td className="px-3 py-2">
-                            <span className={`font-bold ${r.win_rate >= 60 ? 'text-green-400' : r.win_rate >= 50 ? 'text-yellow-400' : 'text-red-400'}`}>
-                              {r.win_rate.toFixed(1)}%
-                            </span>
-                          </td>
-                          <td className={`px-3 py-2 font-semibold font-mono ${r.total_pnl_pct >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                            {r.total_pnl_pct >= 0 ? '+' : ''}{r.total_pnl_pct.toFixed(2)}%
-                          </td>
-                          <td className="px-3 py-2 text-gray-400">{r.total_trades}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             )}
           </div>

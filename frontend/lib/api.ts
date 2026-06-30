@@ -274,3 +274,46 @@ export async function optimizeAllCoins(params: {
 export async function getDashboard(): Promise<{ rows: any[] }> {
   return getJSON('/backtest/dashboard')
 }
+
+// ── Signal Logger ─────────────────────────────────────────────
+export async function scanSignals(params: {
+  coin: string
+  start_dt: string
+  end_dt: string
+  tp_pct?: number
+  tp2_pct?: number
+  sl_pct?: number
+}): Promise<{ coin: string; signals_found: number; message?: string }> {
+  const qs = new URLSearchParams({
+    coin:     params.coin,
+    start_dt: params.start_dt,
+    end_dt:   params.end_dt,
+    tp_pct:   String(params.tp_pct  ?? 2.0),
+    tp2_pct:  String(params.tp2_pct ?? 4.0),
+    sl_pct:   String(params.sl_pct  ?? 1.5),
+  })
+  return getJSON(`/signals/scan?${qs}`, 2)
+}
+
+export async function listSignals(opts?: {
+  coin?: string
+  outcome?: string
+  limit?: number
+}): Promise<{ signals: any[] }> {
+  const qs = new URLSearchParams()
+  if (opts?.coin)    qs.set('coin',    opts.coin)
+  if (opts?.outcome) qs.set('outcome', opts.outcome)
+  if (opts?.limit)   qs.set('limit',   String(opts.limit))
+  return getJSON(`/signals/list?${qs}`, 1)
+}
+
+export async function checkSignal(id: string): Promise<any> {
+  const res = await fetch(`${BASE}/signals/check/${id}`, { method: 'POST' })
+  if (!res.ok) throw new Error(`Check failed: ${res.status}`)
+  return res.json()
+}
+
+export async function clearSignals(coin?: string): Promise<void> {
+  const qs = coin ? `?coin=${coin}` : ''
+  await fetch(`${BASE}/signals/clear${qs}`, { method: 'DELETE' })
+}

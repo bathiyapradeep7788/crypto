@@ -4,7 +4,7 @@ import { usePathname } from 'next/navigation'
 
 const TABS = [
   { href: '/backtest',    label: 'Backtest Bot'     },
-  { href: '/dashboard',   label: '📊 Dashboard'     },
+  { href: '/dashboard',   label: '📡 Signal Logs'   },
   { href: '/paper-trade', label: 'Paper Trade'       },
   { href: '/live-trade',  label: 'Live Actual Trade' },
   { href: '/database',    label: 'Database'          },

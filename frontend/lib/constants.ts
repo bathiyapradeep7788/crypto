@@ -1,9 +1,20 @@
 export const COINS = [
   'BTCUSDT','ETHUSDT','BNBUSDT','SOLUSDT','XRPUSDT',
-  'ADAUSDT','DOGEUSDT','AVAXUSDT','DOTUSDT','MATICUSDT',
-  'LINKUSDT','UNIUSDT','LTCUSDT','ATOMUSDT','NEARUSDT',
-  'APTUSDT','ARBUSDT','OPUSDT','INJUSDT','TIAUSDT',
+  'ADAUSDT','TRXUSDT','LINKUSDT','DOGEUSDT','XLMUSDT',
 ]
+
+export const COIN_LABELS: Record<string, string> = {
+  BTCUSDT:  'BTC',
+  ETHUSDT:  'ETH',
+  BNBUSDT:  'BNB',
+  SOLUSDT:  'SOL',
+  XRPUSDT:  'XRP',
+  ADAUSDT:  'ADA',
+  TRXUSDT:  'TRX',
+  LINKUSDT: 'LINK',
+  DOGEUSDT: 'DOGE',
+  XLMUSDT:  'XLM',
+}
 
 export const STRATEGIES = [
   { id: 'rsi_macd',            label: 'RSI + MACD' },

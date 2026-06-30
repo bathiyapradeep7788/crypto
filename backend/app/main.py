@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.routers import backtest, logs
-from app.routers import paper_trade, live_trade, database, render_logs, strategies, report
+from app.routers import paper_trade, live_trade, database, render_logs, strategies, report, signals
 
 app = FastAPI(title="Algo Trading Platform")
 
@@ -21,6 +21,7 @@ app.include_router(database.router,    prefix="/database",    tags=["database"])
 app.include_router(render_logs.router, prefix="/render",      tags=["render"])
 app.include_router(strategies.router,  prefix="/strategies",  tags=["strategies"])
 app.include_router(report.router,      prefix="/report",      tags=["report"])
+app.include_router(signals.router,     prefix="/signals",     tags=["signals"])
 
 
 @app.get("/")
