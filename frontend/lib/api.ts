@@ -368,6 +368,10 @@ export async function checkSignal(id: string): Promise<any> {
   return res.json()
 }
 
+export async function clearCandleCache(): Promise<void> {
+  await fetch(`${BASE}/signals/clear-candles`, { method: 'DELETE' })
+}
+
 export async function clearSignals(opts?: SignalListOpts): Promise<void> {
   const qs = new URLSearchParams()
   const coin = Array.isArray(opts?.coin) ? opts?.coin.join(',') : opts?.coin

@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import TabBar from '@/components/layout/TabBar'
-import { listAllSignals, checkSignal, clearSignals, getSignalStats, listMethods } from '@/lib/api'
+import { listAllSignals, checkSignal, clearSignals, clearCandleCache, getSignalStats, listMethods } from '@/lib/api'
 import { COINS, COIN_LABELS, STRATEGIES } from '@/lib/constants'
 
 type Signal = {
@@ -202,6 +202,13 @@ export default function DashboardPage() {
     setHasLoaded(false)
   }
 
+  const [clearingCandles, setClearingCandles] = useState(false)
+  const handleClearCandles = async () => {
+    if (!confirm('Delete cached raw candle data fetched from the API? This cannot be undone.')) return
+    setClearingCandles(true)
+    try { await clearCandleCache() } finally { setClearingCandles(false) }
+  }
+
   const handleClearFiltered = async () => {
     if (!hasAnyFilter) { setError('Select at least one filter first to clear a subset'); return }
     if (!confirm('Delete all signal logs matching the current filters? This cannot be undone.')) return
@@ -264,7 +271,12 @@ export default function DashboardPage() {
             </button>
             <button onClick={handleClear}
               className="text-xs px-4 py-2 bg-red-900/30 border border-red-800/50 rounded-lg text-red-400 hover:bg-red-900/50 transition-colors">
-              🗑 Clear All
+              🗑 Clear All (Signals + Results)
+            </button>
+            <button onClick={handleClearCandles} disabled={clearingCandles}
+              title="Delete cached raw candle data pulled from the Binance API by the old Optimize engine"
+              className="text-xs px-4 py-2 bg-purple-900/30 border border-purple-800/50 rounded-lg text-purple-400 hover:bg-purple-900/50 transition-colors disabled:opacity-50">
+              {clearingCandles ? '⟳ Clearing…' : '🕯 Clear Candle Cache'}
             </button>
           </div>
         </div>

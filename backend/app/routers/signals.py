@@ -295,3 +295,22 @@ async def clear_signals(
 
     q.execute()
     return {"cleared": True, "filtered": has_filter}
+
+
+@router.delete("/clear-candles")
+async def clear_candle_cache():
+    """
+    Truncate the legacy raw-candle cache tables (historical_15m_data,
+    historical_15m_portfolio_data) left over from the old Optimize engine.
+    The Signal Logger itself never reads/writes these — it always fetches
+    candles fresh from Binance per scan — so this is just cache cleanup.
+    """
+    client = _supabase()
+    cleared = []
+    for table in ("historical_15m_data", "historical_15m_portfolio_data"):
+        try:
+            client.table(table).delete().neq("coin", "__never__").execute()
+            cleared.append(table)
+        except Exception:
+            pass
+    return {"cleared": True, "tables": cleared}
