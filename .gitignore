@@ -30,3 +30,4 @@ vercel-token.txt
 push_to_github.bat
 *.token
 *.secret
+.vercel

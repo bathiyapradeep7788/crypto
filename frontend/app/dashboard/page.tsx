@@ -1,8 +1,8 @@
 'use client'
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import TabBar from '@/components/layout/TabBar'
-import { listAllSignals, checkSignal, clearSignals, getSignalStats } from '@/lib/api'
-import { COIN_LABELS } from '@/lib/constants'
+import { listAllSignals, checkSignal, clearSignals, getSignalStats, listMethods } from '@/lib/api'
+import { COINS, COIN_LABELS, STRATEGIES } from '@/lib/constants'
 
 type Signal = {
   id: string
@@ -36,12 +36,12 @@ type StratStat = {
   avg_duration_min: number | null
 }
 
+type Method = { id: string; label: string; type: string }
+
 const DIR_COLOR: Record<string, string> = {
   long:  'text-green-400 bg-green-900/20 border-green-800',
   short: 'text-red-400 bg-red-900/20 border-red-800',
 }
-
-const PAGE_SIZE = 100
 
 const fmtDate = (d: string | null) => d ? d.slice(0, 16).replace('T', ' ') : '—'
 
@@ -54,23 +54,85 @@ const fmtDuration = (min: number | null) => {
 
 type SortKey = 'signal_date' | 'close_date' | 'coin' | 'strategy' | 'direction' | 'outcome' | 'profit_pct' | 'duration_min' | 'entry'
 
+// ── Tick / checkbox multi-select dropdown ──────────────────────────────────
+function MultiSelect({
+  label, options, selected, onChange,
+}: {
+  label: string
+  options: { value: string; label: string }[]
+  selected: string[]
+  onChange: (vals: string[]) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const onClick = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', onClick)
+    return () => document.removeEventListener('mousedown', onClick)
+  }, [])
+
+  const toggle = (v: string) =>
+    onChange(selected.includes(v) ? selected.filter(x => x !== v) : [...selected, v])
+
+  const allChecked = selected.length === options.length
+  const summary = selected.length === 0 ? `All ${label}`
+    : selected.length === options.length ? `All ${label} (${options.length})`
+    : `${selected.length} ${label} selected`
+
+  return (
+    <div className="relative" ref={ref}>
+      <label className="block text-[10px] text-gray-500 mb-1">{label}</label>
+      <button onClick={() => setOpen(v => !v)}
+        className="bg-surface-card border border-surface-border rounded px-3 py-1.5 text-sm text-white focus:outline-none focus:border-brand min-w-[160px] text-left flex items-center justify-between gap-2">
+        <span className="truncate">{summary}</span>
+        <span className="text-gray-500 text-[10px]">{open ? '▲' : '▼'}</span>
+      </button>
+      {open && (
+        <div className="absolute z-20 mt-1 w-56 max-h-72 overflow-y-auto bg-surface-card border border-surface-border rounded-lg shadow-xl p-2">
+          <div className="flex items-center justify-between px-2 py-1 border-b border-surface-border mb-1">
+            <button onClick={() => onChange(allChecked ? [] : options.map(o => o.value))}
+              className="text-[10px] text-brand hover:underline">
+              {allChecked ? 'Clear all' : 'Select all'}
+            </button>
+            <span className="text-[10px] text-gray-600">{selected.length}/{options.length}</span>
+          </div>
+          {options.map(o => (
+            <label key={o.value} className="flex items-center gap-2 px-2 py-1 rounded hover:bg-surface-hover cursor-pointer text-xs">
+              <input type="checkbox" checked={selected.includes(o.value)} onChange={() => toggle(o.value)}
+                className="accent-brand" />
+              <span className="text-gray-200 truncate">{o.label}</span>
+            </label>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function DashboardPage() {
   const [signals,       setSignals]       = useState<Signal[]>([])
   const [totalDb,       setTotalDb]       = useState(0)
   const [loading,       setLoading]       = useState(true)
   const [loadProgress,  setLoadProgress]  = useState({ loaded: 0, total: 0 })
-  const [filterCoin,    setFilterCoin]    = useState('')
+  const [methods,       setMethods]       = useState<Method[]>(STRATEGIES.map(s => ({ ...s, type: 'builtin' })))
+  const [filterCoins,   setFilterCoins]   = useState<string[]>([])   // [] = all
+  const [filterStrats,  setFilterStrats]  = useState<string[]>([])   // [] = all
   const [filterOutcome, setFilterOutcome] = useState('')
-  const [filterStrat,   setFilterStrat]   = useState('')
   const [dateFrom,      setDateFrom]      = useState('')  // yyyy-mm-dd — close date range
   const [dateTo,        setDateTo]        = useState('')
   const [sortKey,       setSortKey]       = useState<SortKey>('signal_date')
   const [sortDir,       setSortDir]       = useState<'asc' | 'desc'>('desc')
-  const [page,          setPage]          = useState(1)
   const [checking,      setChecking]      = useState<Set<string>>(new Set())
   const [error,         setError]         = useState('')
   const [stats,         setStats]         = useState<StratStat[]>([])
   const [statsOpen,     setStatsOpen]     = useState(true)
+
+  useEffect(() => {
+    listMethods().then(r => setMethods(r.methods)).catch(() => {})
+  }, [])
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -82,8 +144,9 @@ export default function DashboardPage() {
       const close_to   = dateTo   ? `${dateTo}T00:00:00`   : undefined
       const data = await listAllSignals(
         {
-          coin:    filterCoin    || undefined,
-          outcome: filterOutcome || undefined,
+          coin:        filterCoins.length  ? filterCoins  : undefined,
+          strategy_id: filterStrats.length ? filterStrats : undefined,
+          outcome:     filterOutcome || undefined,
           close_from, close_to,
           sort_by: sortKey, sort_dir: sortDir,
         },
@@ -91,7 +154,6 @@ export default function DashboardPage() {
       )
       setSignals(data.signals)
       setTotalDb(data.total)
-      setPage(1)
 
       const st = await getSignalStats({ close_from, close_to })
       setStats(st.stats)
@@ -99,7 +161,7 @@ export default function DashboardPage() {
       setError(e.message)
     }
     setLoading(false)
-  }, [filterCoin, filterOutcome, dateFrom, dateTo, sortKey, sortDir])
+  }, [filterCoins, filterStrats, filterOutcome, dateFrom, dateTo, sortKey, sortDir])
 
   useEffect(() => { load() }, [load])
 
@@ -127,32 +189,19 @@ export default function DashboardPage() {
     setStats([])
   }
 
-  // Client-side strategy filter (server filters cover the rest)
-  const visible = useMemo(
-    () => filterStrat ? signals.filter(s => s.strategy_id === filterStrat) : signals,
-    [signals, filterStrat],
-  )
-
-  const wins    = visible.filter(s => s.outcome === 'Win').length
-  const losses  = visible.filter(s => s.outcome === 'Loss').length
+  const wins    = signals.filter(s => s.outcome === 'Win').length
+  const losses  = signals.filter(s => s.outcome === 'Loss').length
   const checked = wins + losses
   const wr      = checked ? ((wins / checked) * 100).toFixed(1) : '—'
 
-  const uniqueCoins  = useMemo(() => Array.from(new Set(signals.map(s => s.coin))).sort(), [signals])
-  const uniqueStrats = useMemo(() => {
-    const m = new Map<string, string>()
-    signals.forEach(s => m.set(s.strategy_id, s.strategy))
-    return Array.from(m.entries()).sort((a, b) => a[1].localeCompare(b[1]))
-  }, [signals])
-
-  const totalPages = Math.max(1, Math.ceil(visible.length / PAGE_SIZE))
-  const pageRows   = visible.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
+  const coinOptions = useMemo(() => COINS.map(c => ({ value: c, label: COIN_LABELS[c] ?? c.replace('USDT', '') })), [])
+  const stratOptions = useMemo(() => methods.map(m => ({ value: m.id, label: m.label })), [methods])
 
   const bestStrat = stats.length ? stats.reduce((a, b) =>
     (b.win_rate ?? -1) > (a.win_rate ?? -1) ? b : a) : null
 
   const SortHeader = ({ label, k }: { label: string; k: SortKey }) => (
-    <th className="px-3 py-2.5 text-left font-medium cursor-pointer select-none hover:text-white"
+    <th className="px-3 py-2.5 text-left font-medium cursor-pointer select-none hover:text-white sticky top-0 bg-surface"
       onClick={() => handleSort(k)}>
       {label} {sortKey === k ? (sortDir === 'asc' ? '▲' : '▼') : <span className="text-gray-700">⇅</span>}
     </th>
@@ -187,7 +236,7 @@ export default function DashboardPage() {
         <div className="grid grid-cols-5 gap-3 mb-5">
           <div className="bg-surface-card border border-surface-border rounded-lg p-4">
             <p className="text-xs text-gray-500">Total (filtered)</p>
-            <p className="text-2xl font-bold text-white mt-1">{visible.length.toLocaleString()}</p>
+            <p className="text-2xl font-bold text-white mt-1">{signals.length.toLocaleString()}</p>
             <p className="text-[10px] text-gray-600 mt-0.5">{totalDb.toLocaleString()} in DB</p>
           </div>
           <div className="bg-surface-card border border-surface-border rounded-lg p-4">
@@ -276,16 +325,8 @@ export default function DashboardPage() {
 
         {/* Filters */}
         <div className="flex flex-wrap items-end gap-3 mb-4">
-          <div>
-            <label className="block text-[10px] text-gray-500 mb-1">Coin</label>
-            <select value={filterCoin} onChange={e => setFilterCoin(e.target.value)}
-              className="bg-surface-card border border-surface-border rounded px-3 py-1.5 text-sm text-white focus:outline-none focus:border-brand">
-              <option value="">All Coins</option>
-              {uniqueCoins.map(c => (
-                <option key={c} value={c}>{COIN_LABELS[c] ?? c.replace('USDT','')}</option>
-              ))}
-            </select>
-          </div>
+          <MultiSelect label="Coins" options={coinOptions} selected={filterCoins} onChange={setFilterCoins} />
+          <MultiSelect label="Strategies" options={stratOptions} selected={filterStrats} onChange={setFilterStrats} />
           <div>
             <label className="block text-[10px] text-gray-500 mb-1">Outcome</label>
             <select value={filterOutcome} onChange={e => setFilterOutcome(e.target.value)}
@@ -294,16 +335,6 @@ export default function DashboardPage() {
               <option value="null">Unchecked</option>
               <option value="Win">Wins only</option>
               <option value="Loss">Losses only</option>
-            </select>
-          </div>
-          <div>
-            <label className="block text-[10px] text-gray-500 mb-1">Strategy</label>
-            <select value={filterStrat} onChange={e => { setFilterStrat(e.target.value); setPage(1) }}
-              className="bg-surface-card border border-surface-border rounded px-3 py-1.5 text-sm text-white focus:outline-none focus:border-brand max-w-[200px]">
-              <option value="">All Strategies</option>
-              {uniqueStrats.map(([id, label]) => (
-                <option key={id} value={id}>{label}</option>
-              ))}
             </select>
           </div>
           <div>
@@ -316,16 +347,16 @@ export default function DashboardPage() {
             <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
               className="bg-surface-card border border-surface-border rounded px-3 py-1.5 text-sm text-white focus:outline-none focus:border-brand" />
           </div>
-          {(dateFrom || dateTo) && (
-            <button onClick={() => { setDateFrom(''); setDateTo('') }}
+          {(dateFrom || dateTo || filterCoins.length || filterStrats.length || filterOutcome) && (
+            <button onClick={() => { setDateFrom(''); setDateTo(''); setFilterCoins([]); setFilterStrats([]); setFilterOutcome('') }}
               className="text-xs px-3 py-1.5 rounded border border-surface-border text-gray-400 hover:text-white">
-              ✕ Clear dates
+              ✕ Clear filters
             </button>
           )}
           <span className="text-xs text-gray-600 pb-1.5">
             {loading
               ? `loading ${loadProgress.loaded.toLocaleString()} / ${loadProgress.total.toLocaleString()}…`
-              : `${visible.length.toLocaleString()} signals`}
+              : `${signals.length.toLocaleString()} signals`}
           </span>
         </div>
 
@@ -333,14 +364,14 @@ export default function DashboardPage() {
           <div className="mb-4 bg-red-900/20 border border-red-800 rounded-lg px-4 py-3 text-sm text-red-400">{error}</div>
         )}
 
-        {/* Signal list */}
+        {/* Signal list — full data, no pagination */}
         {loading ? (
           <div className="bg-surface-card border border-surface-border rounded-lg p-8 text-center text-gray-500 text-sm">
             Loading all signals… {loadProgress.total > 0 && (
               <span className="text-brand font-mono">{loadProgress.loaded.toLocaleString()} / {loadProgress.total.toLocaleString()}</span>
             )}
           </div>
-        ) : visible.length === 0 ? (
+        ) : signals.length === 0 ? (
           <div className="bg-surface-card border border-surface-border rounded-lg p-8 text-center">
             <p className="text-gray-400 text-sm mb-1">No signals match.</p>
             <p className="text-gray-600 text-xs">
@@ -349,11 +380,11 @@ export default function DashboardPage() {
           </div>
         ) : (
           <div className="bg-surface-card border border-surface-border rounded-lg overflow-hidden">
-            <div className="overflow-x-auto">
+            <div className="overflow-auto max-h-[75vh]">
               <table className="w-full text-xs">
                 <thead className="text-gray-500 border-b border-surface-border bg-surface">
                   <tr>
-                    <th className="px-3 py-2.5 text-left font-medium">#</th>
+                    <th className="px-3 py-2.5 text-left font-medium sticky top-0 bg-surface">#</th>
                     <SortHeader label="Coin"        k="coin" />
                     <SortHeader label="Signal Date" k="signal_date" />
                     <SortHeader label="Close Date"  k="close_date" />
@@ -361,21 +392,21 @@ export default function DashboardPage() {
                     <SortHeader label="Strategy"    k="strategy" />
                     <SortHeader label="Dir"         k="direction" />
                     <SortHeader label="Entry"       k="entry" />
-                    <th className="px-3 py-2.5 text-left font-medium">TP1</th>
-                    <th className="px-3 py-2.5 text-left font-medium">TP2</th>
-                    <th className="px-3 py-2.5 text-left font-medium">SL</th>
+                    <th className="px-3 py-2.5 text-left font-medium sticky top-0 bg-surface">TP1</th>
+                    <th className="px-3 py-2.5 text-left font-medium sticky top-0 bg-surface">TP2</th>
+                    <th className="px-3 py-2.5 text-left font-medium sticky top-0 bg-surface">SL</th>
                     <SortHeader label="Outcome" k="outcome" />
                     <SortHeader label="PnL%"    k="profit_pct" />
-                    <th className="px-3 py-2.5 text-left font-medium">Action</th>
+                    <th className="px-3 py-2.5 text-left font-medium sticky top-0 bg-surface">Action</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {pageRows.map((s, idx) => {
+                  {signals.map((s, idx) => {
                     const isChecking = checking.has(s.id)
                     return (
                       <tr key={s.id}
                         className="border-b border-surface-border hover:bg-surface-hover transition-colors">
-                        <td className="px-3 py-2 text-gray-600 font-mono">{(page - 1) * PAGE_SIZE + idx + 1}</td>
+                        <td className="px-3 py-2 text-gray-600 font-mono">{idx + 1}</td>
                         <td className="px-3 py-2 text-blue-400 font-bold font-mono">
                           {COIN_LABELS[s.coin] ?? s.coin.replace('USDT', '')}
                         </td>
@@ -439,28 +470,9 @@ export default function DashboardPage() {
                 </tbody>
               </table>
             </div>
-
-            {/* Pagination */}
-            {totalPages > 1 && (
-              <div className="flex items-center justify-between px-4 py-3 border-t border-surface-border">
-                <span className="text-xs text-gray-500">
-                  Page {page} of {totalPages.toLocaleString()} · {visible.length.toLocaleString()} signals
-                </span>
-                <div className="flex items-center gap-1">
-                  <button onClick={() => setPage(1)} disabled={page === 1}
-                    className="text-xs px-2 py-1 rounded border border-surface-border text-gray-400 hover:text-white disabled:opacity-30">⏮</button>
-                  <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}
-                    className="text-xs px-3 py-1 rounded border border-surface-border text-gray-400 hover:text-white disabled:opacity-30">← Prev</button>
-                  <input type="number" min={1} max={totalPages} value={page}
-                    onChange={e => setPage(Math.min(totalPages, Math.max(1, parseInt(e.target.value) || 1)))}
-                    className="w-16 bg-surface border border-surface-border rounded px-2 py-1 text-xs text-white text-center" />
-                  <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages}
-                    className="text-xs px-3 py-1 rounded border border-surface-border text-gray-400 hover:text-white disabled:opacity-30">Next →</button>
-                  <button onClick={() => setPage(totalPages)} disabled={page === totalPages}
-                    className="text-xs px-2 py-1 rounded border border-surface-border text-gray-400 hover:text-white disabled:opacity-30">⏭</button>
-                </div>
-              </div>
-            )}
+            <div className="px-4 py-2 border-t border-surface-border text-[10px] text-gray-600">
+              Showing all {signals.length.toLocaleString()} matching signals
+            </div>
           </div>
         )}
       </main>

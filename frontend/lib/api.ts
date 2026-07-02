@@ -301,7 +301,8 @@ export async function scanSignals(params: {
 }
 
 export type SignalListOpts = {
-  coin?: string
+  coin?: string | string[]
+  strategy_id?: string | string[]
   outcome?: string
   close_from?: string
   close_to?: string
@@ -313,7 +314,10 @@ export type SignalListOpts = {
 
 export async function listSignals(opts?: SignalListOpts): Promise<{ signals: any[]; total: number }> {
   const qs = new URLSearchParams()
-  if (opts?.coin)       qs.set('coin',       opts.coin)
+  const coin = Array.isArray(opts?.coin) ? opts?.coin.join(',') : opts?.coin
+  const sid  = Array.isArray(opts?.strategy_id) ? opts?.strategy_id.join(',') : opts?.strategy_id
+  if (coin)              qs.set('coin',        coin)
+  if (sid)               qs.set('strategy_id', sid)
   if (opts?.outcome)    qs.set('outcome',    opts.outcome)
   if (opts?.close_from) qs.set('close_from', opts.close_from)
   if (opts?.close_to)   qs.set('close_to',   opts.close_to)

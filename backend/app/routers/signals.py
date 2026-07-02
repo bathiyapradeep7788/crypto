@@ -28,6 +28,9 @@ STRATEGY_LABELS = {
     "ict_order_block":     "ICT Order Block + FVG",
     "fibonacci":           "Fibonacci Retracement",
     "volume_momentum":     "Volume-Momentum Breakout",
+    "supertrend":          "Supertrend (ATR)",
+    "adx_trend":           "ADX Trend (DI Crossover)",
+    "donchian_breakout":   "Donchian Channel Breakout",
 }
 
 INTERVAL = "15m"
@@ -147,14 +150,15 @@ async def scan_signals(
 
 @router.get("/list")
 async def list_signals(
-    coin:       Optional[str] = Query(default=None),
-    outcome:    Optional[str] = Query(default=None, description="Win | Loss | null"),
-    close_from: Optional[str] = Query(default=None, description="ISO date — filter close_date >= this"),
-    close_to:   Optional[str] = Query(default=None, description="ISO date — filter close_date < this"),
-    sort_by:    str           = Query(default="signal_date"),
-    sort_dir:   str           = Query(default="desc"),
-    limit:      int           = Query(default=1000, le=1000),
-    offset:     int           = Query(default=0, ge=0),
+    coin:        Optional[str] = Query(default=None, description="comma-separated coins, e.g. BTCUSDT,ETHUSDT"),
+    strategy_id: Optional[str] = Query(default=None, description="comma-separated strategy ids"),
+    outcome:     Optional[str] = Query(default=None, description="Win | Loss | null"),
+    close_from:  Optional[str] = Query(default=None, description="ISO date — filter close_date >= this"),
+    close_to:    Optional[str] = Query(default=None, description="ISO date — filter close_date < this"),
+    sort_by:     str           = Query(default="signal_date"),
+    sort_dir:    str           = Query(default="desc"),
+    limit:       int           = Query(default=1000, le=1000),
+    offset:      int           = Query(default=0, ge=0),
 ):
     """Return one page of signal_logs + total count matching the filters."""
     client = _supabase()
@@ -168,7 +172,11 @@ async def list_signals(
         .order(sort_by, desc=(sort_dir != "asc")) \
         .range(offset, offset + limit - 1)
     if coin:
-        q = q.eq("coin", coin.upper())
+        coins = [c.strip().upper() for c in coin.split(",") if c.strip()]
+        q = q.in_("coin", coins) if len(coins) > 1 else q.eq("coin", coins[0])
+    if strategy_id:
+        ids = [s.strip() for s in strategy_id.split(",") if s.strip()]
+        q = q.in_("strategy_id", ids) if len(ids) > 1 else q.eq("strategy_id", ids[0])
     if outcome == "null":
         q = q.is_("outcome", "null")
     elif outcome:

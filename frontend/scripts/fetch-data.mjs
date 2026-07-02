@@ -111,8 +111,12 @@ async function fetchCoin(coin, startTime, endTime) {
 }
 
 async function main() {
-  const endTime   = Date.now()
-  const startTime = endTime - SIX_MONTHS
+  const args = process.argv.slice(2)
+  const argMap = {}
+  for (let i = 0; i < args.length; i += 2) argMap[args[i]] = args[i+1]
+
+  const endTime   = argMap['--end']   ? new Date(argMap['--end']).getTime()   : Date.now()
+  const startTime = argMap['--start'] ? new Date(argMap['--start']).getTime() : endTime - SIX_MONTHS
 
   console.log('\n╔═══════════════════════════════════════════════════════╗')
   console.log('║  RESILIENT DATA FETCHER — Binance → Supabase          ║')
