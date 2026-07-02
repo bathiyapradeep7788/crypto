@@ -27,9 +27,6 @@ export const STRATEGIES = [
   { id: 'ict_order_block',     label: 'ICT Order Block + FVG' },
   { id: 'fibonacci',           label: 'Fibonacci Retracement' },
   { id: 'volume_momentum',     label: 'Volume-Momentum Breakout' },
-  { id: 'supertrend',          label: 'Supertrend (ATR)' },
-  { id: 'adx_trend',           label: 'ADX Trend (DI Crossover)' },
-  { id: 'donchian_breakout',   label: 'Donchian Channel Breakout' },
 ]
 
 export const INTERVALS = [
@@ -50,9 +47,6 @@ export const STRATEGY_LABELS: Record<string, string> = {
   ict_order_block:     'ICT Order Block + FVG',
   fibonacci:           'Fibonacci Retracement',
   volume_momentum:     'Volume-Momentum Breakout',
-  supertrend:          'Supertrend (ATR)',
-  adx_trend:           'ADX Trend (DI Crossover)',
-  donchian_breakout:   'Donchian Channel Breakout',
 }
 
 export const DEFAULT_PARAMS: Record<string, { key: string; label: string; default: number }[]> = {
@@ -89,16 +83,5 @@ export const DEFAULT_PARAMS: Record<string, { key: string; label: string; defaul
   ],
   volume_momentum: [
     { key: 'vol_spike_mult', label: 'Volume Spike Multiplier', default: 2.0 },
-  ],
-  supertrend: [
-    { key: 'atr_period',     label: 'ATR Period',     default: 10 },
-    { key: 'atr_multiplier', label: 'ATR Multiplier', default: 3.0 },
-  ],
-  adx_trend: [
-    { key: 'adx_period',  label: 'ADX Period',    default: 14 },
-    { key: 'adx_min_gap', label: 'Min DI Gap',    default: 5.0 },
-  ],
-  donchian_breakout: [
-    { key: 'donchian_period', label: 'Channel Period', default: 20 },
   ],
 }

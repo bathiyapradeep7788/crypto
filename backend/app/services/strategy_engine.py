@@ -6,7 +6,6 @@ from app.strategies.all_strategies import (
     VwapMeanReversionStrategy, SupportResistanceStrategy,
     IchimokuStrategy, StochRsiVolumeStrategy, IctOrderBlockStrategy,
     FibonacciStrategy, VolumeMomentumStrategy,
-    SupertrendStrategy, AdxTrendStrategy, DonchianBreakoutStrategy,
 )
 from app.services.combined_store import COMBO_PREFIX, get_combined
 
@@ -21,9 +20,6 @@ STRATEGY_MAP = {
     "ict_order_block":     IctOrderBlockStrategy,
     "fibonacci":           FibonacciStrategy,
     "volume_momentum":     VolumeMomentumStrategy,
-    "supertrend":          SupertrendStrategy,
-    "adx_trend":           AdxTrendStrategy,
-    "donchian_breakout":   DonchianBreakoutStrategy,
 }
 
 def get_signal(

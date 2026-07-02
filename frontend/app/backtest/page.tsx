@@ -10,19 +10,43 @@ import { scanSignals, listMethods, createCombined } from '@/lib/api'
 import { DEFAULT_PARAMS, COINS, COIN_LABELS, STRATEGIES } from '@/lib/constants'
 import { useErrorToast } from '@/hooks/useErrorToast'
 
-const MONTHS = [
-  { label: 'Jan 2025', start: '2025-01-01T00:00', end: '2025-02-01T00:00' },
-  { label: 'Feb 2025', start: '2025-02-01T00:00', end: '2025-03-01T00:00' },
-  { label: 'Mar 2025', start: '2025-03-01T00:00', end: '2025-04-01T00:00' },
-  { label: 'Apr 2025', start: '2025-04-01T00:00', end: '2025-05-01T00:00' },
-  { label: 'May 2025', start: '2025-05-01T00:00', end: '2025-06-01T00:00' },
-]
-
+type MonthSeg = { label: string; start: string; end: string }
 type CoinStatus = 'idle' | 'scanning' | 'done' | 'error'
 type CoinResult = { signals: number; error?: string }
 type Method = { id: string; label: string; type: string }
 
 const coinShort = (c: string) => COIN_LABELS[c] ?? c.replace('USDT', '')
+
+const pad = (n: number) => String(n).padStart(2, '0')
+const toLocalDT = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+
+// Splits any [start, end) range into calendar-month segments — partial first/last
+// month plus full months in between, e.g. 2025-01-08→2025-04-13 becomes
+// "Jan 2025 (8–31)", "Feb 2025", "Mar 2025", "Apr 2025 (1–13)".
+function splitIntoMonths(startStr: string, endStr: string): MonthSeg[] {
+  const start = new Date(startStr)
+  const end = new Date(endStr)
+  if (isNaN(start.getTime()) || isNaN(end.getTime()) || start >= end) return []
+
+  const segments: MonthSeg[] = []
+  let cursor = new Date(start)
+  while (cursor < end) {
+    const nextMonthStart = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1, 0, 0, 0)
+    const segEnd = nextMonthStart < end ? nextMonthStart : end
+    const monthName = cursor.toLocaleString('en-US', { month: 'short' })
+    const year = cursor.getFullYear()
+    const isFullMonth = cursor.getDate() === 1 && cursor.getHours() === 0 && cursor.getMinutes() === 0
+      && segEnd.getTime() === nextMonthStart.getTime()
+    let label = `${monthName} ${year}`
+    if (!isFullMonth) {
+      const lastIncluded = new Date(segEnd.getTime() - 60000)
+      label += ` (${cursor.getDate()}–${lastIncluded.getDate()})`
+    }
+    segments.push({ label, start: toLocalDT(cursor), end: toLocalDT(segEnd) })
+    cursor = segEnd
+  }
+  return segments
+}
 
 export default function BacktestPage() {
   const { run, status, progress, results, error } = useBacktest()
@@ -44,6 +68,11 @@ export default function BacktestPage() {
   const [coinList,   setCoinList]   = useState<string[]>([...COINS])
   const [scanCoins,  setScanCoins]  = useState<string[]>([...COINS])
   const [newCoin,    setNewCoin]    = useState('')
+
+  // ── Scanner: custom date range → auto-split into month segments ──
+  const [scanStartDt, setScanStartDt] = useState('2025-01-01T00:00')
+  const [scanEndDt,   setScanEndDt]   = useState('2025-06-01T00:00')
+  const months = splitIntoMonths(scanStartDt, scanEndDt)
 
   // ── Scanner: methods (strategies + combos) ──
   const [methods,       setMethods]       = useState<Method[]>(STRATEGIES.map(s => ({ ...s, type: 'builtin' })))
@@ -133,6 +162,7 @@ export default function BacktestPage() {
   const handleScan = async () => {
     if (!scanCoins.length)  { addToast('Select at least one coin', 'warning'); return }
     if (!scanStrats.length) { addToast('Select at least one strategy', 'warning'); return }
+    if (!months.length)     { addToast('Invalid date range', 'warning'); return }
     setScanning(true)
     setScanDone(false)
     setMonthDone([])
@@ -143,7 +173,7 @@ export default function BacktestPage() {
     setCurrentStrat('')
     setCoinResults({})
 
-    const total = scanCoins.length * MONTHS.length
+    const total = scanCoins.length * months.length
     setTotalCount(total)
 
     const initStatus: Record<string, CoinStatus> = {}
@@ -160,7 +190,7 @@ export default function BacktestPage() {
     let grandTotal = 0
     let done = 0
 
-    for (const month of MONTHS) {
+    for (const month of months) {
       setCurrentMonth(month.label)
 
       for (const coin of scanCoins) {
@@ -257,7 +287,7 @@ export default function BacktestPage() {
             {/* Config row */}
             <div className="bg-surface-card border border-surface-border rounded-lg p-4">
               <div className="flex items-center justify-between mb-3">
-                <h3 className="text-sm font-semibold text-gray-300">Scan Config · 15m locked · Jan–May 2025</h3>
+                <h3 className="text-sm font-semibold text-gray-300">Scan Config · 15m locked · {months.length} month segment{months.length !== 1 ? 's' : ''}</h3>
                 <div className="flex gap-2">
                   <button onClick={handleScan} disabled={scanning}
                     className={`px-5 py-2 rounded-lg text-sm font-bold transition-all ${
@@ -271,6 +301,22 @@ export default function BacktestPage() {
                       View Dashboard →
                     </a>
                   )}
+                </div>
+              </div>
+
+              {/* Custom date range — auto-split into month segments */}
+              <div className="grid grid-cols-2 gap-3 mb-3">
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">Start Date</label>
+                  <input type="datetime-local" value={scanStartDt} disabled={scanning}
+                    onChange={e => setScanStartDt(e.target.value)}
+                    className="w-full bg-surface border border-surface-border rounded px-2 py-1.5 text-sm text-white focus:outline-none focus:border-brand" />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">End Date</label>
+                  <input type="datetime-local" value={scanEndDt} disabled={scanning}
+                    onChange={e => setScanEndDt(e.target.value)}
+                    className="w-full bg-surface border border-surface-border rounded px-2 py-1.5 text-sm text-white focus:outline-none focus:border-brand" />
                 </div>
               </div>
 
@@ -458,20 +504,19 @@ export default function BacktestPage() {
                   <span className="text-xs text-green-400 font-semibold">{totalSignals.toLocaleString()} total signals</span>
                 )}
               </div>
-              <div className="flex gap-2">
-                {MONTHS.map(m => {
+              <div className="flex flex-wrap gap-2">
+                {months.map(m => {
                   const done = monthDone.includes(m.label)
                   const active = scanning && currentMonth === m.label
                   return (
-                    <div key={m.label} className={`flex-1 rounded-lg border p-2 text-center transition-all ${
+                    <div key={m.label} className={`min-w-[90px] flex-1 rounded-lg border p-2 text-center transition-all ${
                       done   ? 'border-green-600 bg-green-900/20' :
                       active ? 'border-brand bg-brand/10 animate-pulse' :
                                'border-surface-border bg-surface'
                     }`}>
-                      <div className={`text-xs font-semibold ${done ? 'text-green-400' : active ? 'text-brand' : 'text-gray-600'}`}>
-                        {m.label.split(' ')[0]}
+                      <div className={`text-xs font-semibold whitespace-nowrap ${done ? 'text-green-400' : active ? 'text-brand' : 'text-gray-600'}`}>
+                        {m.label}
                       </div>
-                      <div className="text-[10px] text-gray-500 mt-0.5">2025</div>
                       {done && <div className="text-[10px] text-green-500 mt-0.5">done</div>}
                       {active && <div className="text-[10px] text-brand mt-0.5">scanning</div>}
                     </div>

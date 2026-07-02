@@ -134,7 +134,15 @@ export default function DashboardPage() {
     listMethods().then(r => setMethods(r.methods)).catch(() => {})
   }, [])
 
+  const [hasLoaded, setHasLoaded] = useState(false)
+
+  const hasAnyFilter = filterCoins.length > 0 || filterStrats.length > 0 || !!filterOutcome || !!dateFrom || !!dateTo
+
   const load = useCallback(async () => {
+    if (!hasAnyFilter) {
+      setError('Select at least one filter (coin, strategy, outcome, or date range) before loading data')
+      return
+    }
     setLoading(true)
     setError('')
     setLoadProgress({ loaded: 0, total: 0 })
@@ -154,6 +162,7 @@ export default function DashboardPage() {
       )
       setSignals(data.signals)
       setTotalDb(data.total)
+      setHasLoaded(true)
 
       const st = await getSignalStats({ close_from, close_to })
       setStats(st.stats)
@@ -161,9 +170,13 @@ export default function DashboardPage() {
       setError(e.message)
     }
     setLoading(false)
-  }, [filterCoins, filterStrats, filterOutcome, dateFrom, dateTo, sortKey, sortDir])
+  }, [hasAnyFilter, filterCoins, filterStrats, filterOutcome, dateFrom, dateTo, sortKey, sortDir])
 
-  useEffect(() => { load() }, [load])
+  // Re-sorting an already-loaded result set should re-fetch (sort happens server-side)
+  useEffect(() => {
+    if (hasLoaded) load()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sortKey, sortDir])
 
   const handleSort = (key: SortKey) => {
     if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
@@ -221,10 +234,12 @@ export default function DashboardPage() {
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <button onClick={load} disabled={loading}
-              className="text-xs px-4 py-2 bg-surface-card border border-surface-border rounded-lg text-gray-300 hover:text-white transition-colors">
-              {loading ? '⟳ Loading…' : '↻ Refresh'}
-            </button>
+            {hasLoaded && (
+              <button onClick={load} disabled={loading}
+                className="text-xs px-4 py-2 bg-surface-card border border-surface-border rounded-lg text-gray-300 hover:text-white transition-colors">
+                {loading ? '⟳ Loading…' : '↻ Refresh'}
+              </button>
+            )}
             <button onClick={handleClear}
               className="text-xs px-4 py-2 bg-red-900/30 border border-red-800/50 rounded-lg text-red-400 hover:bg-red-900/50 transition-colors">
               🗑 Clear All
@@ -347,29 +362,43 @@ export default function DashboardPage() {
             <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
               className="bg-surface-card border border-surface-border rounded px-3 py-1.5 text-sm text-white focus:outline-none focus:border-brand" />
           </div>
+          <button onClick={load} disabled={loading || !hasAnyFilter}
+            className={`text-xs px-4 py-1.5 rounded-lg font-semibold transition-all ${
+              loading || !hasAnyFilter
+                ? 'bg-surface-border text-gray-500 cursor-not-allowed'
+                : 'bg-brand hover:bg-brand-dark text-black'}`}>
+            {loading ? '⟳ Loading…' : '🔍 Show Filtered Data'}
+          </button>
           {(dateFrom || dateTo || filterCoins.length || filterStrats.length || filterOutcome) && (
-            <button onClick={() => { setDateFrom(''); setDateTo(''); setFilterCoins([]); setFilterStrats([]); setFilterOutcome('') }}
+            <button onClick={() => { setDateFrom(''); setDateTo(''); setFilterCoins([]); setFilterStrats([]); setFilterOutcome(''); setSignals([]); setHasLoaded(false); setError('') }}
               className="text-xs px-3 py-1.5 rounded border border-surface-border text-gray-400 hover:text-white">
               ✕ Clear filters
             </button>
           )}
-          <span className="text-xs text-gray-600 pb-1.5">
-            {loading
-              ? `loading ${loadProgress.loaded.toLocaleString()} / ${loadProgress.total.toLocaleString()}…`
-              : `${signals.length.toLocaleString()} signals`}
-          </span>
+          {hasLoaded && (
+            <span className="text-xs text-gray-600 pb-1.5">
+              {loading
+                ? `loading ${loadProgress.loaded.toLocaleString()} / ${loadProgress.total.toLocaleString()}…`
+                : `${signals.length.toLocaleString()} signals`}
+            </span>
+          )}
         </div>
 
         {error && (
           <div className="mb-4 bg-red-900/20 border border-red-800 rounded-lg px-4 py-3 text-sm text-red-400">{error}</div>
         )}
 
-        {/* Signal list — full data, no pagination */}
+        {/* Signal list — loaded only after filters selected + Show clicked */}
         {loading ? (
           <div className="bg-surface-card border border-surface-border rounded-lg p-8 text-center text-gray-500 text-sm">
-            Loading all signals… {loadProgress.total > 0 && (
+            Loading matching signals… {loadProgress.total > 0 && (
               <span className="text-brand font-mono">{loadProgress.loaded.toLocaleString()} / {loadProgress.total.toLocaleString()}</span>
             )}
+          </div>
+        ) : !hasLoaded ? (
+          <div className="bg-surface-card border border-surface-border rounded-lg p-8 text-center">
+            <p className="text-gray-400 text-sm mb-1">Select coin / strategy / outcome / date filters above, then click <strong className="text-brand">Show Filtered Data</strong>.</p>
+            <p className="text-gray-600 text-xs">Data isn't loaded automatically to keep the dashboard fast.</p>
           </div>
         ) : signals.length === 0 ? (
           <div className="bg-surface-card border border-surface-border rounded-lg p-8 text-center">

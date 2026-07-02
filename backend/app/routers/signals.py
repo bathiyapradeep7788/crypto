@@ -28,9 +28,6 @@ STRATEGY_LABELS = {
     "ict_order_block":     "ICT Order Block + FVG",
     "fibonacci":           "Fibonacci Retracement",
     "volume_momentum":     "Volume-Momentum Breakout",
-    "supertrend":          "Supertrend (ATR)",
-    "adx_trend":           "ADX Trend (DI Crossover)",
-    "donchian_breakout":   "Donchian Channel Breakout",
 }
 
 INTERVAL = "15m"
