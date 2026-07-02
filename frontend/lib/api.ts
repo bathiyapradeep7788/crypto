@@ -283,6 +283,8 @@ export async function scanSignals(params: {
   tp_pct?: number
   tp2_pct?: number
   sl_pct?: number
+  strategies?: string[]
+  strategyParams?: Record<string, Record<string, number>>
 }): Promise<{ coin: string; signals_found: number; message?: string }> {
   const qs = new URLSearchParams({
     coin:     params.coin,
@@ -292,19 +294,68 @@ export async function scanSignals(params: {
     tp2_pct:  String(params.tp2_pct ?? 4.0),
     sl_pct:   String(params.sl_pct  ?? 1.5),
   })
+  if (params.strategies?.length) qs.set('strategies', params.strategies.join(','))
+  if (params.strategyParams && Object.keys(params.strategyParams).length)
+    qs.set('params', JSON.stringify(params.strategyParams))
   return getJSON(`/signals/scan?${qs}`, 2)
 }
 
-export async function listSignals(opts?: {
+export type SignalListOpts = {
   coin?: string
   outcome?: string
+  close_from?: string
+  close_to?: string
+  sort_by?: string
+  sort_dir?: string
   limit?: number
-}): Promise<{ signals: any[] }> {
+  offset?: number
+}
+
+export async function listSignals(opts?: SignalListOpts): Promise<{ signals: any[]; total: number }> {
   const qs = new URLSearchParams()
-  if (opts?.coin)    qs.set('coin',    opts.coin)
-  if (opts?.outcome) qs.set('outcome', opts.outcome)
-  if (opts?.limit)   qs.set('limit',   String(opts.limit))
+  if (opts?.coin)       qs.set('coin',       opts.coin)
+  if (opts?.outcome)    qs.set('outcome',    opts.outcome)
+  if (opts?.close_from) qs.set('close_from', opts.close_from)
+  if (opts?.close_to)   qs.set('close_to',   opts.close_to)
+  if (opts?.sort_by)    qs.set('sort_by',    opts.sort_by)
+  if (opts?.sort_dir)   qs.set('sort_dir',   opts.sort_dir)
+  qs.set('limit',  String(opts?.limit  ?? 1000))
+  qs.set('offset', String(opts?.offset ?? 0))
   return getJSON(`/signals/list?${qs}`, 1)
+}
+
+// Fetch ALL matching signals by paging through /signals/list (1000/page),
+// fetching 5 pages in parallel per batch to keep large datasets fast.
+export async function listAllSignals(
+  opts: Omit<SignalListOpts, 'limit' | 'offset'>,
+  onProgress?: (loaded: number, total: number) => void,
+): Promise<{ signals: any[]; total: number }> {
+  const first = await listSignals({ ...opts, limit: 1000, offset: 0 })
+  const total = first.total
+  const all: any[] = [...first.signals]
+  onProgress?.(all.length, total)
+
+  const PARALLEL = 5
+  let offset = 1000
+  while (offset < total) {
+    const offsets: number[] = []
+    for (let i = 0; i < PARALLEL && offset < total; i++, offset += 1000) offsets.push(offset)
+    const pages = await Promise.all(offsets.map(o => listSignals({ ...opts, limit: 1000, offset: o })))
+    pages.forEach(p => all.push(...p.signals))
+    onProgress?.(all.length, total)
+  }
+  return { signals: all, total }
+}
+
+export async function getSignalStats(opts?: { close_from?: string; close_to?: string }): Promise<{ stats: any[] }> {
+  const qs = new URLSearchParams()
+  if (opts?.close_from) qs.set('close_from', opts.close_from)
+  if (opts?.close_to)   qs.set('close_to',   opts.close_to)
+  return getJSON(`/signals/stats?${qs}`, 1)
+}
+
+export async function listMethods(): Promise<{ methods: { id: string; label: string; type: string }[] }> {
+  return getJSON('/signals/methods', 1)
 }
 
 export async function checkSignal(id: string): Promise<any> {
