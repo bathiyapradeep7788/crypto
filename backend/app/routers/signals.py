@@ -259,23 +259,7 @@ async def check_signal(signal_id: str):
     return {**sig, **update}
 
 
-@router.delete("/clear")
-async def clear_signals(
-    coin:        Optional[str] = Query(default=None, description="comma-separated coins"),
-    strategy_id: Optional[str] = Query(default=None, description="comma-separated strategy ids"),
-    outcome:     Optional[str] = Query(default=None, description="Win | Loss | null"),
-    close_from:  Optional[str] = Query(default=None),
-    close_to:    Optional[str] = Query(default=None),
-):
-    """
-    Delete signal_logs matching the given filters, or ALL rows if no filter is given.
-    Mirrors the filters accepted by /signals/list so the dashboard's
-    "Clear Filtered" button deletes exactly what's currently on screen.
-    """
-    client = _supabase()
-    has_filter = any([coin, strategy_id, outcome, close_from, close_to])
-
-    q = client.table("signal_logs").delete()
+def _apply_signal_filters(q, coin, strategy_id, outcome, close_from, close_to):
     if coin:
         coins = [c.strip().upper() for c in coin.split(",") if c.strip()]
         q = q.in_("coin", coins) if len(coins) > 1 else q.eq("coin", coins[0])
@@ -290,11 +274,47 @@ async def clear_signals(
         q = q.gte("close_date", close_from)
     if close_to:
         q = q.lt("close_date", close_to)
-    if not has_filter:
-        q = q.neq("id", "00000000-0000-0000-0000-000000000000")
+    return q
 
-    q.execute()
-    return {"cleared": True, "filtered": has_filter}
+
+@router.delete("/clear")
+async def clear_signals(
+    coin:        Optional[str] = Query(default=None, description="comma-separated coins"),
+    strategy_id: Optional[str] = Query(default=None, description="comma-separated strategy ids"),
+    outcome:     Optional[str] = Query(default=None, description="Win | Loss | null"),
+    close_from:  Optional[str] = Query(default=None),
+    close_to:    Optional[str] = Query(default=None),
+):
+    """
+    Delete signal_logs matching the given filters, or ALL rows if no filter is given.
+    Mirrors the filters accepted by /signals/list so the dashboard's
+    "Clear Filtered" button deletes exactly what's currently on screen.
+
+    Deletes in batches — a single DELETE across the whole table (hundreds of
+    thousands of rows) trips PostgREST's statement timeout and returns a 500.
+    """
+    client = _supabase()
+    has_filter = any([coin, strategy_id, outcome, close_from, close_to])
+
+    if not has_filter:
+        # Full-table clear: TRUNCATE via RPC is instant, unlike a row-by-row
+        # DELETE across hundreds of thousands of rows (which trips PostgREST's
+        # statement timeout and returns a 500).
+        client.rpc("truncate_signal_logs").execute()
+        return {"cleared": True, "filtered": False}
+
+    BATCH = 2000
+    deleted = 0
+    while True:
+        sel = client.table("signal_logs").select("id")
+        sel = _apply_signal_filters(sel, coin, strategy_id, outcome, close_from, close_to)
+        batch_ids = [r["id"] for r in sel.limit(BATCH).execute().data]
+        if not batch_ids:
+            break
+        client.table("signal_logs").delete().in_("id", batch_ids).execute()
+        deleted += len(batch_ids)
+
+    return {"cleared": True, "filtered": True, "deleted": deleted}
 
 
 @router.delete("/clear-candles")
