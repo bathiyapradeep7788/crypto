@@ -325,12 +325,8 @@ async def clear_candle_cache():
     The Signal Logger itself never reads/writes these — it always fetches
     candles fresh from Binance per scan — so this is just cache cleanup.
     """
+    # A plain DELETE across these tables (hundreds of thousands of rows) trips
+    # PostgREST's statement timeout and returns a 500 — TRUNCATE via RPC is instant.
     client = _supabase()
-    cleared = []
-    for table in ("historical_15m_data", "historical_15m_portfolio_data"):
-        try:
-            client.table(table).delete().neq("coin", "__never__").execute()
-            cleared.append(table)
-        except Exception:
-            pass
-    return {"cleared": True, "tables": cleared}
+    client.rpc("truncate_candle_cache").execute()
+    return {"cleared": True, "tables": ["historical_15m_data", "historical_15m_portfolio_data"]}
