@@ -135,6 +135,8 @@ export default function DashboardPage() {
   }, [])
 
   const [hasLoaded, setHasLoaded] = useState(false)
+  const RENDER_CHUNK = 300
+  const [renderLimit, setRenderLimit] = useState(RENDER_CHUNK)
 
   const hasAnyFilter = filterCoins.length > 0 || filterStrats.length > 0 || !!filterOutcome || !!dateFrom || !!dateTo
 
@@ -159,6 +161,7 @@ export default function DashboardPage() {
       setSignals(data.signals)
       setTotalDb(data.total)
       setHasLoaded(true)
+      setRenderLimit(RENDER_CHUNK)
 
       const st = await getSignalStats({ close_from, close_to })
       setStats(st.stats)
@@ -426,7 +429,7 @@ export default function DashboardPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {signals.map((s, idx) => {
+                  {signals.slice(0, renderLimit).map((s, idx) => {
                     const isChecking = checking.has(s.id)
                     return (
                       <tr key={s.id}
@@ -495,8 +498,22 @@ export default function DashboardPage() {
                 </tbody>
               </table>
             </div>
-            <div className="px-4 py-2 border-t border-surface-border text-[10px] text-gray-600">
-              Showing all {signals.length.toLocaleString()} matching signals
+            <div className="flex items-center justify-between px-4 py-2 border-t border-surface-border">
+              <span className="text-[10px] text-gray-600">
+                Showing {Math.min(renderLimit, signals.length).toLocaleString()} of {signals.length.toLocaleString()} matching signals
+              </span>
+              {renderLimit < signals.length && (
+                <div className="flex items-center gap-2">
+                  <button onClick={() => setRenderLimit(l => l + RENDER_CHUNK)}
+                    className="text-[10px] px-3 py-1 rounded border border-surface-border text-gray-300 hover:text-white hover:border-brand">
+                    ↓ Load {Math.min(RENDER_CHUNK, signals.length - renderLimit).toLocaleString()} more
+                  </button>
+                  <button onClick={() => setRenderLimit(signals.length)}
+                    className="text-[10px] px-3 py-1 rounded border border-surface-border text-gray-400 hover:text-white">
+                    Show all (may be slow)
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         )}
