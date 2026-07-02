@@ -115,7 +115,7 @@ function MultiSelect({
 export default function DashboardPage() {
   const [signals,       setSignals]       = useState<Signal[]>([])
   const [totalDb,       setTotalDb]       = useState(0)
-  const [loading,       setLoading]       = useState(true)
+  const [loading,       setLoading]       = useState(false)
   const [loadProgress,  setLoadProgress]  = useState({ loaded: 0, total: 0 })
   const [methods,       setMethods]       = useState<Method[]>(STRATEGIES.map(s => ({ ...s, type: 'builtin' })))
   const [filterCoins,   setFilterCoins]   = useState<string[]>([])   // [] = all
@@ -139,10 +139,6 @@ export default function DashboardPage() {
   const hasAnyFilter = filterCoins.length > 0 || filterStrats.length > 0 || !!filterOutcome || !!dateFrom || !!dateTo
 
   const load = useCallback(async () => {
-    if (!hasAnyFilter) {
-      setError('Select at least one filter (coin, strategy, outcome, or date range) before loading data')
-      return
-    }
     setLoading(true)
     setError('')
     setLoadProgress({ loaded: 0, total: 0 })
@@ -170,7 +166,7 @@ export default function DashboardPage() {
       setError(e.message)
     }
     setLoading(false)
-  }, [hasAnyFilter, filterCoins, filterStrats, filterOutcome, dateFrom, dateTo, sortKey, sortDir])
+  }, [filterCoins, filterStrats, filterOutcome, dateFrom, dateTo, sortKey, sortDir])
 
   // Re-sorting an already-loaded result set should re-fetch (sort happens server-side)
   useEffect(() => {
@@ -362,12 +358,12 @@ export default function DashboardPage() {
             <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
               className="bg-surface-card border border-surface-border rounded px-3 py-1.5 text-sm text-white focus:outline-none focus:border-brand" />
           </div>
-          <button onClick={load} disabled={loading || !hasAnyFilter}
+          <button onClick={load} disabled={loading}
             className={`text-xs px-4 py-1.5 rounded-lg font-semibold transition-all ${
-              loading || !hasAnyFilter
+              loading
                 ? 'bg-surface-border text-gray-500 cursor-not-allowed'
                 : 'bg-brand hover:bg-brand-dark text-black'}`}>
-            {loading ? '⟳ Loading…' : '🔍 Show Filtered Data'}
+            {loading ? '⟳ Loading…' : hasAnyFilter ? '🔍 Show Filtered Data' : '🔍 Show All Data'}
           </button>
           {(dateFrom || dateTo || filterCoins.length || filterStrats.length || filterOutcome) && (
             <button onClick={() => { setDateFrom(''); setDateTo(''); setFilterCoins([]); setFilterStrats([]); setFilterOutcome(''); setSignals([]); setHasLoaded(false); setError('') }}
@@ -397,8 +393,8 @@ export default function DashboardPage() {
           </div>
         ) : !hasLoaded ? (
           <div className="bg-surface-card border border-surface-border rounded-lg p-8 text-center">
-            <p className="text-gray-400 text-sm mb-1">Select coin / strategy / outcome / date filters above, then click <strong className="text-brand">Show Filtered Data</strong>.</p>
-            <p className="text-gray-600 text-xs">Data isn't loaded automatically to keep the dashboard fast.</p>
+            <p className="text-gray-400 text-sm mb-1">Click <strong className="text-brand">Show Filtered Data</strong> above to load signals.</p>
+            <p className="text-gray-600 text-xs">Optionally select coin / strategy / outcome / date filters first to narrow the results. Data isn't loaded automatically to keep the dashboard fast.</p>
           </div>
         ) : signals.length === 0 ? (
           <div className="bg-surface-card border border-surface-border rounded-lg p-8 text-center">
