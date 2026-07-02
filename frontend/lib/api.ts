@@ -368,7 +368,15 @@ export async function checkSignal(id: string): Promise<any> {
   return res.json()
 }
 
-export async function clearSignals(coin?: string): Promise<void> {
-  const qs = coin ? `?coin=${coin}` : ''
-  await fetch(`${BASE}/signals/clear${qs}`, { method: 'DELETE' })
+export async function clearSignals(opts?: SignalListOpts): Promise<void> {
+  const qs = new URLSearchParams()
+  const coin = Array.isArray(opts?.coin) ? opts?.coin.join(',') : opts?.coin
+  const sid  = Array.isArray(opts?.strategy_id) ? opts?.strategy_id.join(',') : opts?.strategy_id
+  if (coin)              qs.set('coin',        coin)
+  if (sid)               qs.set('strategy_id', sid)
+  if (opts?.outcome)    qs.set('outcome',    opts.outcome)
+  if (opts?.close_from) qs.set('close_from', opts.close_from)
+  if (opts?.close_to)   qs.set('close_to',   opts.close_to)
+  const q = qs.toString()
+  await fetch(`${BASE}/signals/clear${q ? `?${q}` : ''}`, { method: 'DELETE' })
 }

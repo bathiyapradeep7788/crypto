@@ -199,6 +199,21 @@ export default function DashboardPage() {
     setSignals([])
     setTotalDb(0)
     setStats([])
+    setHasLoaded(false)
+  }
+
+  const handleClearFiltered = async () => {
+    if (!hasAnyFilter) { setError('Select at least one filter first to clear a subset'); return }
+    if (!confirm('Delete all signal logs matching the current filters? This cannot be undone.')) return
+    const close_from = dateFrom ? `${dateFrom}T00:00:00` : undefined
+    const close_to   = dateTo   ? `${dateTo}T00:00:00`   : undefined
+    await clearSignals({
+      coin:        filterCoins.length  ? filterCoins  : undefined,
+      strategy_id: filterStrats.length ? filterStrats : undefined,
+      outcome:     filterOutcome || undefined,
+      close_from, close_to,
+    })
+    await load()
   }
 
   const wins    = signals.filter(s => s.outcome === 'Win').length
@@ -239,6 +254,14 @@ export default function DashboardPage() {
                 {loading ? '⟳ Loading…' : '↻ Refresh'}
               </button>
             )}
+            <button onClick={handleClearFiltered} disabled={!hasAnyFilter}
+              title={!hasAnyFilter ? 'Select a filter above to enable' : 'Delete only the currently filtered signals'}
+              className={`text-xs px-4 py-2 rounded-lg border transition-colors ${
+                hasAnyFilter
+                  ? 'bg-orange-900/30 border-orange-800/50 text-orange-400 hover:bg-orange-900/50'
+                  : 'bg-surface-card border-surface-border text-gray-600 cursor-not-allowed'}`}>
+              🧹 Clear Filtered
+            </button>
             <button onClick={handleClear}
               className="text-xs px-4 py-2 bg-red-900/30 border border-red-800/50 rounded-lg text-red-400 hover:bg-red-900/50 transition-colors">
               🗑 Clear All

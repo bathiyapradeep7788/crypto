@@ -260,13 +260,38 @@ async def check_signal(signal_id: str):
 
 
 @router.delete("/clear")
-async def clear_signals(coin: Optional[str] = Query(default=None)):
-    """Delete all signal_logs (or for a specific coin). Hard reset."""
+async def clear_signals(
+    coin:        Optional[str] = Query(default=None, description="comma-separated coins"),
+    strategy_id: Optional[str] = Query(default=None, description="comma-separated strategy ids"),
+    outcome:     Optional[str] = Query(default=None, description="Win | Loss | null"),
+    close_from:  Optional[str] = Query(default=None),
+    close_to:    Optional[str] = Query(default=None),
+):
+    """
+    Delete signal_logs matching the given filters, or ALL rows if no filter is given.
+    Mirrors the filters accepted by /signals/list so the dashboard's
+    "Clear Filtered" button deletes exactly what's currently on screen.
+    """
     client = _supabase()
+    has_filter = any([coin, strategy_id, outcome, close_from, close_to])
+
     q = client.table("signal_logs").delete()
     if coin:
-        q = q.eq("coin", coin.upper())
-    else:
+        coins = [c.strip().upper() for c in coin.split(",") if c.strip()]
+        q = q.in_("coin", coins) if len(coins) > 1 else q.eq("coin", coins[0])
+    if strategy_id:
+        ids = [s.strip() for s in strategy_id.split(",") if s.strip()]
+        q = q.in_("strategy_id", ids) if len(ids) > 1 else q.eq("strategy_id", ids[0])
+    if outcome == "null":
+        q = q.is_("outcome", "null")
+    elif outcome:
+        q = q.eq("outcome", outcome)
+    if close_from:
+        q = q.gte("close_date", close_from)
+    if close_to:
+        q = q.lt("close_date", close_to)
+    if not has_filter:
         q = q.neq("id", "00000000-0000-0000-0000-000000000000")
+
     q.execute()
-    return {"cleared": True, "coin": coin or "all"}
+    return {"cleared": True, "filtered": has_filter}
